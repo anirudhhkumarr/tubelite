@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseBrowseResponse,
+  parseWatchNextResponse,
   buildBrowsePayload,
   buildNextPayload,
   buildSearchPayload,
@@ -10,6 +11,10 @@ import {
   extractWatchedAnnotation,
   extractRunsText
 } from '../src/api/innertube.js';
+import {
+  normalizeFeedResponse,
+  normalizeWatchNextResponse
+} from '../cloudflare/normalizer.js';
 
 describe('InnerTube - SAPISIDHASH Auth Generator', () => {
   it('generates valid SAPISIDHASH token using SHA-1', async () => {
@@ -135,11 +140,11 @@ describe('InnerTube - Browse Response Parser', () => {
   };
 
   it('correctly parses video metadata and filters out shorts shelves', () => {
-    const parsed = parseBrowseResponse(sampleBrowseResponse);
-    assert.equal(parsed.videos.length, 1); // 1 normal video, shorts shelf filtered out
+    const parsed = normalizeFeedResponse(sampleBrowseResponse);
+    assert.equal(parsed.items.length, 1); // 1 normal video, shorts shelf filtered out
     assert.equal(parsed.continuationToken, 'NEXT_PAGE_TOKEN_777');
 
-    const video = parsed.videos[0];
+    const video = parsed.items[0];
     assert.equal(video.id, 'abc111');
     assert.equal(video.title, 'How Quantum Computers Work');
     assert.equal(video.channelTitle, 'Veritasium');
@@ -179,12 +184,12 @@ describe('InnerTube - Browse Response Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(searchResponse);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'search_vid_456');
-    assert.equal(parsed.videos[0].title, 'Deep Learning Specialization');
-    assert.equal(parsed.videos[0].channelTitle, 'Andrew Ng');
-    assert.equal(parsed.videos[0].durationSeconds, 4350);
+    const parsed = normalizeFeedResponse(searchResponse);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'search_vid_456');
+    assert.equal(parsed.items[0].title, 'Deep Learning Specialization');
+    assert.equal(parsed.items[0].channelTitle, 'Andrew Ng');
+    assert.equal(parsed.items[0].durationSeconds, 4350);
   });
 });
 
@@ -320,9 +325,9 @@ describe('InnerTube - TVHTML5 Browse Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(tvResponse);
-    assert.equal(parsed.videos.length, 1);
-    const video = parsed.videos[0];
+    const parsed = normalizeFeedResponse(tvResponse);
+    assert.equal(parsed.items.length, 1);
+    const video = parsed.items[0];
     assert.equal(video.id, 'tv_vid_001');
     assert.equal(video.title, 'Authentic YouTube TV Home');
     assert.equal(video.channelTitle, 'MKBHD');
@@ -406,9 +411,9 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(watchNextResponse);
-    assert.equal(parsed.videos.length, 1);
-    const v = parsed.videos[0];
+    const parsed = normalizeFeedResponse(watchNextResponse);
+    assert.equal(parsed.items.length, 1);
+    const v = parsed.items[0];
     assert.equal(v.id, 'related_vid_123');
     assert.equal(v.title, 'Understanding Neural Networks');
     assert.equal(v.channelTitle, 'Grant Sanderson');
@@ -446,8 +451,8 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(shortsResponse);
-    assert.equal(parsed.videos.length, 0, 'Shorts lockup must be filtered out');
+    const parsed = normalizeFeedResponse(shortsResponse);
+    assert.equal(parsed.items.length, 0, 'Shorts lockup must be filtered out');
   });
 
   it('correctly identifies watched annotations from thumbnail overlays and badges', () => {
@@ -565,9 +570,9 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(invertedResponse);
-    assert.equal(parsed.videos.length, 1);
-    const v = parsed.videos[0];
+    const parsed = normalizeFeedResponse(invertedResponse);
+    assert.equal(parsed.items.length, 1);
+    const v = parsed.items[0];
     assert.equal(v.id, 'cq36YXrfyJE');
     assert.equal(v.title, 'Ads You See Online Are Now Police Surveillance');
     assert.equal(v.channelTitle, 'The Infographics Show');
@@ -672,16 +677,16 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(multiRunResponse);
-    assert.equal(parsed.videos.length, 2);
+    const parsed = normalizeFeedResponse(multiRunResponse);
+    assert.equal(parsed.items.length, 2);
 
-    const v1 = parsed.videos[0];
+    const v1 = parsed.items[0];
     assert.equal(v1.id, 'YmaSEZ6ju2I');
     assert.equal(v1.title, "This Revelation Could Detail Benjamin Netanyahu's Re-Election Bid...");
     assert.equal(v1.channelTitle, 'India Global Review');
     assert.equal(v1.channelId, 'UC_indiaglobal');
 
-    const v2 = parsed.videos[1];
+    const v2 = parsed.items[1];
     assert.equal(v2.id, 'wJo1PV9ErM4');
     assert.equal(v2.title, 'OpenAI is Completely F*cked.');
     assert.equal(v2.channelTitle, 'Moon');
@@ -734,9 +739,9 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(mixedResponse);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'valid_video_789');
+    const parsed = normalizeFeedResponse(mixedResponse);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'valid_video_789');
   });
 
   it('correctly parses channel names containing metric words like Review, View, or Watching structurally without pattern matching', () => {
@@ -794,9 +799,9 @@ describe('InnerTube - Watch Next & Lockup Parser', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(lockupResponse);
-    assert.equal(parsed.videos.length, 1);
-    const video = parsed.videos[0];
+    const parsed = normalizeFeedResponse(lockupResponse);
+    assert.equal(parsed.items.length, 1);
+    const video = parsed.items[0];
     assert.equal(video.id, 'CW5pajF5WoM');
     assert.equal(video.channelTitle, 'India Global Review');
     assert.equal(video.channelId, 'UC83iGbaOhZR8AWNYYNzSNjg');
@@ -817,4 +822,55 @@ describe('InnerTube - extractRunsText helper', () => {
     assert.equal(extractRunsText(undefined), '');
   });
 });
+
+describe('Thin Client Contract - Feed & WatchNext Decoders', () => {
+  it('parseBrowseResponse decodes standardized FeedResponse with items', () => {
+    const feed = {
+      items: [
+        { id: 'v1', title: 'Video 1', channelTitle: 'Channel 1' },
+        { id: 'v2', title: 'Video 2', channelTitle: 'Channel 2' }
+      ],
+      continuationToken: 'TOKEN_123'
+    };
+    const res = parseBrowseResponse(feed);
+    assert.equal(res.videos.length, 2);
+    assert.equal(res.videos[0].id, 'v1');
+    assert.equal(res.continuationToken, 'TOKEN_123');
+  });
+
+  it('parseBrowseResponse decodes standardized FeedResponse with videos', () => {
+    const feed = {
+      videos: [{ id: 'v1', title: 'Video 1' }],
+      continuationToken: 'TOKEN_ABC'
+    };
+    const res = parseBrowseResponse(feed);
+    assert.equal(res.videos.length, 1);
+    assert.equal(res.continuationToken, 'TOKEN_ABC');
+  });
+
+  it('parseBrowseResponse safely returns empty on raw AST or invalid input without fallback walker', () => {
+    assert.deepEqual(parseBrowseResponse(null), { videos: [], continuationToken: null });
+    assert.deepEqual(parseBrowseResponse({}), { videos: [], continuationToken: null });
+    assert.deepEqual(parseBrowseResponse({ contents: { twoColumnBrowseResultsRenderer: {} } }), { videos: [], continuationToken: null });
+  });
+
+  it('parseWatchNextResponse decodes standardized WatchNextResponse', () => {
+    const watchNext = {
+      details: { id: 'main1', title: 'Main Playing Video' },
+      items: [{ id: 'rel1', title: 'Related Video' }],
+      continuationToken: 'WN_TOKEN'
+    };
+    const res = parseWatchNextResponse(watchNext);
+    assert.equal(res.details.id, 'main1');
+    assert.equal(res.items.length, 1);
+    assert.equal(res.items[0].id, 'rel1');
+    assert.equal(res.continuationToken, 'WN_TOKEN');
+  });
+
+  it('parseWatchNextResponse safely handles invalid input', () => {
+    assert.deepEqual(parseWatchNextResponse(null), { details: null, items: [], continuationToken: null });
+    assert.deepEqual(parseWatchNextResponse({}), { details: null, items: [], continuationToken: null });
+  });
+});
+
 

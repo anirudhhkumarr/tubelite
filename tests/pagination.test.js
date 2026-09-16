@@ -1,9 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  parseBrowseResponse,
-  buildBrowsePayload
-} from '../src/api/innertube.js';
+import { buildBrowsePayload } from '../src/api/innertube.js';
+import { normalizeFeedResponse } from '../cloudflare/normalizer.js';
 
 describe('Pagination & Continuation Tests', () => {
   it('extracts continuationToken from search sectionListRenderer contents', () => {
@@ -43,9 +41,9 @@ describe('Pagination & Continuation Tests', () => {
       }
     };
 
-    const parsed = parseBrowseResponse(searchResponseWithContinuation);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'vid_page1_1');
+    const parsed = normalizeFeedResponse(searchResponseWithContinuation);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'vid_page1_1');
     assert.equal(parsed.continuationToken, 'SEARCH_CONTINUATION_TOKEN_PAGE_2');
   });
 
@@ -82,9 +80,9 @@ describe('Pagination & Continuation Tests', () => {
       ]
     };
 
-    const parsed = parseBrowseResponse(continuationActionResponse);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'vid_page2_1');
+    const parsed = normalizeFeedResponse(continuationActionResponse);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'vid_page2_1');
     assert.equal(parsed.continuationToken, 'SEARCH_CONTINUATION_TOKEN_PAGE_3');
   });
 
@@ -123,9 +121,9 @@ describe('Pagination & Continuation Tests', () => {
       ]
     };
 
-    const parsed = parseBrowseResponse(searchContinuationActionResponse);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'vid_search_page2');
+    const parsed = normalizeFeedResponse(searchContinuationActionResponse);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'vid_search_page2');
     assert.equal(parsed.continuationToken, 'SEARCH_CONTINUATION_TOKEN_PAGE_4');
   });
 
@@ -164,11 +162,11 @@ describe('Pagination & Continuation Tests', () => {
       ]
     };
 
-    const parsed = parseBrowseResponse(commandsResponse);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'vid_mweb_page2');
-    assert.equal(parsed.videos[0].title, 'MWEB Continuation Video');
-    assert.equal(parsed.videos[0].channelTitle, 'Mobile Creator');
+    const parsed = normalizeFeedResponse(commandsResponse);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'vid_mweb_page2');
+    assert.equal(parsed.items[0].title, 'MWEB Continuation Video');
+    assert.equal(parsed.items[0].channelTitle, 'Mobile Creator');
     assert.equal(parsed.continuationToken, 'MWEB_NEXT_TOKEN_PAGE_3');
   });
 
@@ -218,10 +216,10 @@ describe('Pagination & Continuation Tests', () => {
       ]
     };
 
-    const parsed = parseBrowseResponse(watchNextContinuation);
-    assert.equal(parsed.videos.length, 1);
-    assert.equal(parsed.videos[0].id, 'related_cont_vid_01');
-    assert.equal(parsed.videos[0].title, 'Related Video Part 2');
+    const parsed = normalizeFeedResponse(watchNextContinuation);
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].id, 'related_cont_vid_01');
+    assert.equal(parsed.items[0].title, 'Related Video Part 2');
     assert.equal(parsed.continuationToken, 'WATCH_NEXT_PAGE_3_TOKEN');
   });
 });

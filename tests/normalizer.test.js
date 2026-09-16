@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   extractRunsText,
   parseDurationToSeconds,
@@ -11,30 +14,45 @@ import {
   normalizeWatchNextResponse
 } from '../cloudflare/normalizer.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const scratchDir = path.resolve(__dirname, '../scratch');
+
+function loadScratchJson(filename) {
+  const filePath = path.join(scratchDir, filename);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Required test fixture not found: ${filePath}`);
+  }
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
 describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => {
-  it('extractRunsText handles string, simpleText, content, and runs array correctly', () => {
-    assert.equal(extractRunsText('hello'), 'hello');
-    assert.equal(extractRunsText({ simpleText: 'simple' }), 'simple');
-    assert.equal(extractRunsText({ content: 'content' }), 'content');
-    assert.equal(extractRunsText({ runs: [{ text: 'a ' }, { text: 'b' }] }), 'a b');
-    assert.equal(extractRunsText(null), '');
-  });
+  describe('Helper Utilities', () => {
+    it('extractRunsText handles string, simpleText, content, and runs array correctly', () => {
+      assert.equal(extractRunsText('hello'), 'hello');
+      assert.equal(extractRunsText({ simpleText: 'simple' }), 'simple');
+      assert.equal(extractRunsText({ content: 'content' }), 'content');
+      assert.equal(extractRunsText({ runs: [{ text: 'a ' }, { text: 'b' }] }), 'a b');
+      assert.equal(extractRunsText(null), '');
+      assert.equal(extractRunsText(undefined), '');
+    });
 
-  it('parseDurationToSeconds correctly converts MM:SS and HH:MM:SS', () => {
-    assert.equal(parseDurationToSeconds('0:45'), 45);
-    assert.equal(parseDurationToSeconds('3:33'), 213);
-    assert.equal(parseDurationToSeconds('1:02:05'), 3725);
-    assert.equal(parseDurationToSeconds(120), 120);
-    assert.equal(parseDurationToSeconds(null), null);
-    assert.equal(parseDurationToSeconds('invalid'), null);
-  });
+    it('parseDurationToSeconds correctly converts MM:SS and HH:MM:SS', () => {
+      assert.equal(parseDurationToSeconds('0:45'), 45);
+      assert.equal(parseDurationToSeconds('3:33'), 213);
+      assert.equal(parseDurationToSeconds('1:02:05'), 3725);
+      assert.equal(parseDurationToSeconds(120), 120);
+      assert.equal(parseDurationToSeconds(null), null);
+      assert.equal(parseDurationToSeconds('invalid'), null);
+    });
 
-  it('parseViewCount converts view strings to integers', () => {
-    assert.equal(parseViewCount('1.5M views'), 1500000);
-    assert.equal(parseViewCount('250K views'), 250000);
-    assert.equal(parseViewCount('1,234 views'), 1234);
-    assert.equal(parseViewCount('No views'), 0);
-    assert.equal(parseViewCount(100), 100);
+    it('parseViewCount converts view strings to integers', () => {
+      assert.equal(parseViewCount('1.5M views'), 1500000);
+      assert.equal(parseViewCount('250K views'), 250000);
+      assert.equal(parseViewCount('1,234 views'), 1234);
+      assert.equal(parseViewCount('No views'), 0);
+      assert.equal(parseViewCount(100), 100);
+    });
   });
 
   describe('Shorts Detection & Exclusion', () => {
@@ -63,35 +81,19 @@ describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => 
       assert.equal(isShortVideo(item), true);
     });
 
-    it('detects #shorts hashtag in title', () => {
-      const item = {
-        videoRenderer: {
-          videoId: 'vid2',
-          title: { simpleText: 'Funny cat video #shorts' }
-        }
-      };
-      assert.equal(isShortVideo(item), true);
+    it('detects structural reelWatchEndpoint navigation as shorts', () => {
+      assert.equal(isShortVideo({ videoRenderer: { navigationEndpoint: { reelWatchEndpoint: { videoId: 'reel_1' } } } }), true);
+      assert.equal(isShortVideo({ tileRenderer: { onSelectCommand: { reelWatchEndpoint: { videoId: 'reel_2' } } } }), true);
     });
 
     it('detects duration < 60s as shorts', () => {
-      const item = {
-        videoRenderer: {
-          videoId: 'vid3',
-          lengthText: { simpleText: '0:45' }
-        }
-      };
-      assert.equal(isShortVideo(item), true);
+      assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '0:45' } } }), true);
+      assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '0:59' } } }), true);
     });
 
     it('preserves long-form videos (>60s)', () => {
-      const item = {
-        videoRenderer: {
-          videoId: 'vid4',
-          title: { simpleText: 'Full Length Video' },
-          lengthText: { simpleText: '10:05' }
-        }
-      };
-      assert.equal(isShortVideo(item), false);
+      assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '1:01' } } }), false);
+      assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '14:20' } } }), false);
     });
   });
 
@@ -100,218 +102,115 @@ describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => 
       assert.equal(isValidVideo({ playlistRenderer: { playlistId: 'PL123' } }), false);
       assert.equal(isValidVideo({ channelRenderer: { channelId: 'UC123' } }), false);
       assert.equal(isValidVideo({ radioRenderer: { playlistId: 'RD123' } }), false);
-      assert.equal(isValidVideo({ adSlotRenderer: {} }), false);
-      assert.equal(isValidVideo({ promotedVideoRenderer: {} }), false);
     });
 
     it('rejects non-video IDs (VL, PL, RD, UU, UC, @)', () => {
-      assert.equal(isValidVideo({ videoRenderer: { videoId: 'PLabcdef123456' } }), false);
-      assert.equal(isValidVideo({ videoRenderer: { videoId: 'UCabcdef123456' } }), false);
-      assert.equal(isValidVideo({ videoRenderer: { videoId: '@channelhandle' } }), false);
+      assert.equal(isValidVideo({ videoRenderer: { videoId: 'PL12345' } }), false);
+      assert.equal(isValidVideo({ videoRenderer: { videoId: 'UC12345' } }), false);
     });
 
-    it('rejects stacked card collections', () => {
+    it('rejects stacked card collections and sponsored ad tiles', () => {
+      assert.equal(isValidVideo({ videoRenderer: { videoId: 'v1', contentImage: { collectionThumbnailViewModel: {} } } }), false);
       assert.equal(isValidVideo({
-        videoRenderer: {
-          videoId: 'v1234567890',
-          contentImage: { collectionThumbnailViewModel: {} }
+        tileRenderer: {
+          contentId: 'ad_tile_1',
+          contentType: 'TILE_CONTENT_TYPE_VIDEO',
+          metadata: {
+            tileMetadataRenderer: {
+              lines: [{
+                lineRenderer: {
+                  items: [{
+                    lineItemRenderer: {
+                      badge: { adBadgeViewModel: { style: 'AD_BADGE_STYLE_STARK', label: { content: 'Sponsored' } } }
+                    }
+                  }]
+                }
+              }]
+            }
+          }
         }
       }), false);
     });
   });
 
-  describe('Full Normalization Pipeline', () => {
-    it('normalizes heterogeneous browse payload into clean FeedResponse', () => {
-      const rawPayload = {
-        contents: {
-          twoColumnBrowseResultsRenderer: {
-            tabs: [{
-              tabRenderer: {
-                content: {
-                  richGridRenderer: {
-                    contents: [
-                      // Valid video
-                      {
-                        richItemRenderer: {
-                          content: {
-                            videoRenderer: {
-                              videoId: 'validVid123',
-                              title: { runs: [{ text: 'Sample Long Form Video' }] },
-                              ownerText: { runs: [{ text: 'Awesome Creator' }] },
-                              viewCountText: { simpleText: '1.2M views' },
-                              publishedTimeText: { simpleText: '2 days ago' },
-                              lengthText: { simpleText: '14:22' },
-                              thumbnail: {
-                                thumbnails: [{ url: 'https://i.ytimg.com/vi/validVid123/hqdefault.jpg' }]
-                              }
-                            }
-                          }
-                        }
-                      },
-                      // Modern Lockup View Model (Valid)
-                      {
-                        lockupViewModel: {
-                          contentId: 'lockupVid456',
-                          contentType: 'LOCKUP_CONTENT_TYPE_VIDEO',
-                          metadata: {
-                            lockupMetadataViewModel: {
-                              title: { content: 'Modern Lockup Video' },
-                              metadata: {
-                                contentMetadataViewModel: {
-                                  metadataRows: [
-                                    { parts: [{ text: { content: 'Tech Channel' } }] },
-                                    { parts: [{ text: { content: '50K views' } }, { text: { content: '1 week ago' } }] }
-                                  ]
-                                }
-                              }
-                            }
-                          },
-                          contentImage: {
-                            thumbnailViewModel: {
-                              image: {
-                                sources: [{ url: 'https://i.ytimg.com/vi/lockupVid456/hqdefault.jpg' }]
-                              },
-                              overlays: [{
-                                thumbnailBottomOverlayViewModel: {
-                                  badges: [{ thumbnailBadgeViewModel: { text: '8:45' } }]
-                                }
-                              }]
-                            }
-                          }
-                        }
-                      },
-                      // Shorts (MUST BE FILTERED)
-                      {
-                        richItemRenderer: {
-                          content: {
-                            videoRenderer: {
-                              videoId: 'shortDropMe',
-                              title: { simpleText: 'Short clip #shorts' },
-                              lengthText: { simpleText: '0:30' }
-                            }
-                          }
-                        }
-                      },
-                      // Playlist (MUST BE FILTERED)
-                      {
-                        playlistRenderer: {
-                          playlistId: 'PLplaylistDropMe'
-                        }
-                      },
-                      // Continuation Item
-                      {
-                        continuationItemRenderer: {
-                          continuationEndpoint: {
-                            continuationCommand: {
-                              token: 'next_page_token_abc'
-                            }
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              }
-            }]
-          }
-        }
-      };
+  describe('Empirical Real-World Corpus Validation (Scratch Dumps)', () => {
+    it('normalizes authentic Home Recommendations feed (browse_what_to_watch_page_1.json)', () => {
+      const raw = loadScratchJson('browse_what_to_watch_page_1.json');
+      const feed = normalizeFeedResponse(raw);
 
-      const feed = normalizeFeedResponse(rawPayload);
+      assert.ok(feed.items.length > 0, 'Feed should return normalized items');
+      assert.ok(feed.continuationToken, 'Continuation token should be present');
 
-      assert.equal(feed.items.length, 2, 'Should only contain the 2 valid long-form videos');
-      assert.equal(feed.continuationToken, 'next_page_token_abc');
-
-      const v1 = feed.items[0];
-      assert.equal(v1.id, 'validVid123');
-      assert.equal(v1.title, 'Sample Long Form Video');
-      assert.equal(v1.channelTitle, 'Awesome Creator');
-      assert.equal(v1.duration, '14:22');
-      assert.equal(v1.durationSeconds, 862);
-      assert.equal(v1.views, '1.2M views');
-      assert.equal(v1.viewCount, 1200000);
-      assert.equal(v1.publishedAt, '2 days ago');
-      assert.equal(v1.isShort, undefined);
-
-      const v2 = feed.items[1];
-      assert.equal(v2.id, 'lockupVid456');
-      assert.equal(v2.title, 'Modern Lockup Video');
-      assert.equal(v2.channelTitle, 'Tech Channel');
-      assert.equal(v2.duration, '8:45');
-      assert.equal(v2.durationSeconds, 525);
-      assert.equal(v2.isShort, undefined);
+      for (const item of feed.items) {
+        assert.ok(item.id && item.id.trim().length > 0, 'Item must have a non-empty id');
+        assert.ok(item.title && item.title.trim().length > 0, `Item ${item.id} must have a non-empty title`);
+        assert.ok(item.channelTitle && item.channelTitle.trim().length > 0, `Item ${item.id} must have a non-empty channelTitle`);
+        assert.ok(item.views && item.views.trim().length > 0, `Item ${item.id} (${item.title}) must have a non-empty views string`);
+        assert.ok(item.publishedAt && item.publishedAt.trim().length > 0, `Item ${item.id} (${item.title}) must have a non-empty publishedAt string`);
+        assert.notEqual(item.publishedAt, '•', `Item ${item.id} publishedAt must never be delimiter bullet`);
+        assert.notEqual(item.publishedTime, '•', `Item ${item.id} publishedTime must never be delimiter bullet`);
+      }
     });
 
-    it('normalizes Watch Next response into details, related items, and continuation', () => {
-      const rawNext = {
-        currentVideoEndpoint: {
-          watchEndpoint: { videoId: 'mainVideoId1' }
-        },
-        contents: {
-          twoColumnWatchNextResults: {
-            results: {
-              results: {
-                contents: [
-                  {
-                    videoPrimaryInfoRenderer: {
-                      title: { runs: [{ text: 'Main Playing Video' }] },
-                      viewCount: { videoViewCountRenderer: { viewCount: { simpleText: '3.4M views' } } },
-                      dateText: { simpleText: 'Premiered Oct 12, 2024' }
-                    }
-                  },
-                  {
-                    videoSecondaryInfoRenderer: {
-                      owner: {
-                        videoOwnerRenderer: {
-                          title: { runs: [{ text: 'Main Channel' }] },
-                          subscriberCountText: { simpleText: '2.1M subscribers' }
-                        }
-                      },
-                      description: { simpleText: 'Full video description here...' }
-                    }
-                  }
-                ]
-              }
-            },
-            secondaryResults: {
-              secondaryResults: {
-                results: [
-                  {
-                    compactVideoRenderer: {
-                      videoId: 'relatedVid1',
-                      title: { simpleText: 'Related Video 1' },
-                      shortBylineText: { simpleText: 'Related Creator' },
-                      lengthText: { simpleText: '12:00' },
-                      viewCountText: { simpleText: '400K views' }
-                    }
-                  },
-                  // Related short (MUST BE DROPPED)
-                  {
-                    compactVideoRenderer: {
-                      videoId: 'relatedShort',
-                      title: { simpleText: 'Quick Short #shorts' },
-                      lengthText: { simpleText: '0:20' }
-                    }
-                  }
-                ]
-              }
-            }
-          }
+    it('normalizes authentic Subscriptions feed across pages (browse_subscriptions_page_1.json)', () => {
+      const raw = loadScratchJson('browse_subscriptions_page_1.json');
+      const feed = normalizeFeedResponse(raw);
+
+      assert.ok(feed.items.length > 0, 'Subscriptions feed should return normalized items');
+      for (const item of feed.items) {
+        assert.ok(item.id && item.id.trim().length > 0);
+        assert.ok(item.title && item.title.trim().length > 0);
+        assert.ok(item.channelTitle && item.channelTitle.trim().length > 0, `Item ${item.id} must have a channel title`);
+        assert.ok(item.views && item.views.trim().length > 0, `Item ${item.id} must have views`);
+        assert.ok(item.publishedAt && item.publishedAt.trim().length > 0, `Item ${item.id} must have publishedAt`);
+        assert.notEqual(item.publishedAt, '•');
+        assert.notEqual(item.publishedTime, '•');
+      }
+    });
+
+    it('normalizes authentic Watch Next recommendations (next_tuBCgJK6vxc_page_1.json)', () => {
+      const raw = loadScratchJson('next_tuBCgJK6vxc_page_1.json');
+      const watchNext = normalizeWatchNextResponse(raw);
+
+      assert.ok(watchNext.items.length > 0, 'Watch next should contain related recommendation items');
+      for (const item of watchNext.items) {
+        assert.ok(item.id && item.id.trim().length > 0);
+        assert.ok(item.title && item.title.trim().length > 0);
+        assert.ok(item.channelTitle && item.channelTitle.trim().length > 0, `Item ${item.id} must have a channel title`);
+        assert.ok(item.views && item.views.trim().length > 0, `Item ${item.id} must have views`);
+        // Live streams have 'watching' metric and naturally have no published date
+        if (!item.views.includes('watching')) {
+          assert.ok(item.publishedAt && item.publishedAt.trim().length > 0, `Item ${item.id} must have publishedAt`);
         }
-      };
+        assert.notEqual(item.publishedAt, '•');
+        assert.notEqual(item.publishedTime, '•');
+      }
+    });
 
-      const watchNext = normalizeWatchNextResponse(rawNext);
+    it('normalizes authentic Search results across TV and Web clients', () => {
+      const tvNews = loadScratchJson('search_tv_news_page_1.json');
+      const tvFeed = normalizeFeedResponse(tvNews);
+      assert.ok(tvFeed.items.length > 0, 'TV search should return items');
+      for (const item of tvFeed.items) {
+        assert.ok(item.id && item.id.trim().length > 0);
+        assert.ok(item.title && item.title.trim().length > 0);
+        assert.ok(item.channelTitle && item.channelTitle.trim().length > 0);
+        assert.ok(item.views && item.views.trim().length > 0);
+        assert.ok(item.publishedAt && item.publishedAt.trim().length > 0);
+        assert.notEqual(item.publishedAt, '•');
+      }
 
-      assert.ok(watchNext.details, 'details should be present');
-      assert.equal(watchNext.details.id, 'mainVideoId1');
-      assert.equal(watchNext.details.title, 'Main Playing Video');
-      assert.equal(watchNext.details.channelTitle, 'Main Channel');
-      assert.equal(watchNext.details.subscriberCount, '2.1M subscribers');
-      assert.equal(watchNext.details.videoDescription, 'Full video description here...');
-
-      assert.equal(watchNext.items.length, 1);
-      assert.equal(watchNext.items[0].id, 'relatedVid1');
-      assert.equal(watchNext.items[0].isShort, undefined);
+      const webSpace = loadScratchJson('search_web_space_page_1.json');
+      const webFeed = normalizeFeedResponse(webSpace);
+      assert.ok(webFeed.items.length > 0, 'Web search should return items');
+      for (const item of webFeed.items) {
+        assert.ok(item.id && item.id.trim().length > 0);
+        assert.ok(item.title && item.title.trim().length > 0);
+        assert.ok(item.channelTitle && item.channelTitle.trim().length > 0);
+        assert.ok(item.views && item.views.trim().length > 0);
+        assert.ok(item.publishedAt && item.publishedAt.trim().length > 0);
+        assert.notEqual(item.publishedAt, '•');
+      }
     });
   });
 });

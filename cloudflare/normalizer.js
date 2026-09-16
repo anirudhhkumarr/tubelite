@@ -178,11 +178,6 @@ export function isShortVideo(item) {
     }
   }
 
-  // 3. Title hashtag regex check
-  const title = extractRunsText(target.title || target.headline || target.metadata?.lockupMetadataViewModel?.title);
-  if (title && /(?:^|\s)#shorts?(?:\s|$|[!?.,])/i.test(title)) {
-    return true;
-  }
 
   // 4. Navigation URL or reelWatchEndpoint check
   const onTap =
@@ -375,6 +370,20 @@ export function isValidVideo(item, options = {}) {
     return false;
   }
 
+  // 7. Exclude sponsored / ad items (e.g. adBadgeViewModel in tileRenderer lines or adPingingEndpoint)
+  if (renderer.metadata?.tileMetadataRenderer?.lines) {
+    const lines = renderer.metadata.tileMetadataRenderer.lines;
+    const hasAdBadge = lines.some((l) =>
+      (l.lineRenderer?.items || []).some((it) => it.lineItemRenderer?.badge?.adBadgeViewModel)
+    );
+    if (hasAdBadge) return false;
+  }
+
+  const firstVisible = renderer.onFirstVisibleCommand || item.onFirstVisibleCommand;
+  if (firstVisible?.commandExecutorCommand?.commands?.some((c) => c.adPingingEndpoint)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -525,34 +534,78 @@ export function parseVideoNode(item, options = {}) {
 
     if (lockupMeta.metadata?.contentMetadataViewModel?.metadataRows) {
       const rows = lockupMeta.metadata.contentMetadataViewModel.metadataRows;
-      for (const row of rows) {
-        const parts = row.metadataParts || row.parts || [];
-        if (!parts.length) continue;
+      if (rows.length === 1) {
+        // Single row containing parts
+        const parts = (rows[0].metadataParts || rows[0].parts || []).filter((p) => {
+          const txt = extractRunsText(p.text);
+          return txt && txt.trim() !== '•';
+        });
+        if (parts.length >= 3) {
+          if (!channelTitle) channelTitle = extractRunsText(parts[0].text).trim();
+          if (!views) views = extractRunsText(parts[1].text).trim();
+          if (!publishedAt) publishedAt = (extractRunsText(parts[2].text) || parts[2].accessibilityLabel || '').trim();
+        } else if (parts.length === 2) {
+          if (!channelTitle) channelTitle = extractRunsText(parts[0].text).trim();
+          if (!views) views = extractRunsText(parts[1].text).trim();
+        } else if (parts.length === 1) {
+          if (!channelTitle) channelTitle = extractRunsText(parts[0].text).trim();
+        }
+      } else if (rows.length >= 2) {
+        let channelParts = null;
+        let metricsParts = null;
 
-        // In lockupViewModel metadataRows, metric rows contain accessibilityLabel or multiple metric items
-        const isMetricsRow = parts.some((p) => p.accessibilityLabel || p.text?.accessibility?.accessibilityData?.label) || parts.length > 1;
+        for (const row of rows) {
+          const parts = (row.metadataParts || row.parts || []).filter((p) => {
+            const txt = extractRunsText(p.text);
+            return txt && txt.trim() !== '•';
+          });
+          if (!parts.length) continue;
 
-        if (isMetricsRow) {
-          if (!views && parts[0]) {
-            views = parts[0].accessibilityLabel || parts[0].text?.accessibility?.accessibilityData?.label || extractRunsText(parts[0].text);
+          const hasChannelBrowseId = parts.some((p) => {
+            const bId =
+              p.commandContext?.onTap?.innertubeCommand?.browseEndpoint?.browseId ||
+              p.text?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId ||
+              '';
+            return bId && (bId.startsWith('UC') || bId.startsWith('@'));
+          });
+
+          const isMetrics =
+            !hasChannelBrowseId &&
+            (parts.length >= 2 || parts.some((p) => p.accessibilityLabel || p.text?.accessibility?.accessibilityData?.label));
+
+          if (hasChannelBrowseId) {
+            channelParts = parts;
+          } else if (isMetrics) {
+            metricsParts = parts;
+          } else if (!channelParts) {
+            channelParts = parts;
+          } else if (!metricsParts) {
+            metricsParts = parts;
           }
-          if (!publishedAt && parts[1]) {
-            publishedAt = extractRunsText(parts[1].text) || parts[1].accessibilityLabel || '';
-          }
-        } else {
-          // Channel row
-          for (const p of parts) {
+        }
+
+        if (channelParts) {
+          for (const p of channelParts) {
             const browseId =
               p.commandContext?.onTap?.innertubeCommand?.browseEndpoint?.browseId ||
               p.text?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId ||
               '';
-            if (browseId && browseId.startsWith('UC')) {
+            if (browseId && (browseId.startsWith('UC') || browseId.startsWith('@')) && !channelId) {
               channelId = browseId;
             }
             const text = extractRunsText(p.text);
             if (text && !channelTitle) {
-              channelTitle = text;
+              channelTitle = text.trim();
             }
+          }
+        }
+
+        if (metricsParts) {
+          if (metricsParts.length >= 2) {
+            if (!views) views = (metricsParts[0].accessibilityLabel || metricsParts[0].text?.accessibility?.accessibilityData?.label || extractRunsText(metricsParts[0].text)).trim();
+            if (!publishedAt) publishedAt = (extractRunsText(metricsParts[1].text) || metricsParts[1].accessibilityLabel || '').trim();
+          } else if (metricsParts.length === 1) {
+            if (!views) views = (metricsParts[0].accessibilityLabel || metricsParts[0].text?.accessibility?.accessibilityData?.label || extractRunsText(metricsParts[0].text)).trim();
           }
         }
       }
@@ -566,19 +619,40 @@ export function parseVideoNode(item, options = {}) {
       title = extractRunsText(tileMeta.title);
     }
     if (tileMeta.lines && Array.isArray(tileMeta.lines)) {
-      // Line 0: Channel info
+      // Line 0: Channel info (skip delimiter bullets and badges)
       const line0Items = tileMeta.lines[0]?.lineRenderer?.items || tileMeta.lines[0]?.tileMetadataLineRenderer?.texts || tileMeta.lines[0]?.texts || [];
-      if (!channelTitle && line0Items[0]) {
-        channelTitle = extractRunsText(line0Items[0].lineItemRenderer?.text || line0Items[0]);
+      for (const it of line0Items) {
+        if (it.lineItemRenderer?.badge) continue;
+        const textNode = it.lineItemRenderer?.text || (it.lineItemRenderer ? null : it);
+        const text = extractRunsText(textNode);
+        if (text && text.trim() !== '•') {
+          if (!channelTitle) channelTitle = text.trim();
+          const browseId = textNode?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+          if (browseId && browseId.startsWith('UC') && !channelId) {
+            channelId = browseId;
+          }
+          break;
+        }
       }
 
-      // Line 1: Metrics (Item 0 = Views, Item 1 = Published Date)
+      // Line 1: Metrics (filter out badges and delimiter bullets)
       const line1Items = tileMeta.lines[1]?.lineRenderer?.items || tileMeta.lines[1]?.tileMetadataLineRenderer?.texts || tileMeta.lines[1]?.texts || [];
-      if (!views && line1Items[0]) {
-        views = extractRunsText(line1Items[0].lineItemRenderer?.text || line1Items[0]);
+      const textSegments = [];
+      for (const it of line1Items) {
+        if (it.lineItemRenderer?.badge) continue;
+        const textNode = it.lineItemRenderer?.text || (it.lineItemRenderer ? null : it);
+        const text = extractRunsText(textNode);
+        if (text && text.trim() !== '•') {
+          textSegments.push(text.trim());
+        }
       }
-      if (!publishedAt && line1Items[1]) {
-        publishedAt = extractRunsText(line1Items[1].lineItemRenderer?.text || line1Items[1]);
+
+      if (textSegments.length >= 2) {
+        if (!views) views = textSegments[0];
+        if (!publishedAt) publishedAt = textSegments[1];
+      } else if (textSegments.length === 1) {
+        // If single segment (e.g. '245 watching'), treat as primary metric/views without speculative age
+        if (!views) views = textSegments[0];
       }
     }
   }
