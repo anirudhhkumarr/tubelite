@@ -15,7 +15,7 @@ public struct MainView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(0)
             
-            SearchFeedView(onSelect: { selectedVideo = $0 })
+            SearchFeedView(isActive: selectedTab == 1, onSelect: { selectedVideo = $0 })
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(1)
             
@@ -136,6 +136,7 @@ private struct HomeFeedView: View {
 
 private struct SearchFeedView: View {
     @StateObject private var client = TubeLiteGatewayClient.shared
+    let isActive: Bool
     let onSelect: (VideoItem) -> Void
     
     @State private var query = ""
@@ -211,12 +212,32 @@ private struct SearchFeedView: View {
         }
         .background(TLTheme.canvas.ignoresSafeArea())
         .defaultFocus($searchFieldFocused, true)
+        .onChange(of: isActive) { _, active in
+            if active {
+                activateSearchField()
+            } else {
+                searchFieldFocused = false
+            }
+        }
+        .onAppear {
+            if isActive {
+                activateSearchField()
+            }
+        }
+    }
+    
+    private func activateSearchField() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            searchFieldFocused = true
+        }
     }
     
     private func submit() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         appliedQuery = trimmed
+        searchFieldFocused = false
         Task { await client.search(query: trimmed) }
     }
 }
