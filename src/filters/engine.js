@@ -62,7 +62,8 @@ export function isShort(item) {
   if (item.duration && typeof item.duration === 'string' && ['SHORTS', 'STATION', 'MIX'].includes(item.duration.toUpperCase())) {
     return true;
   }
-  if (item.title && typeof item.title === 'string' && /(?:^|\s)#shorts?(?:\s|$|[!?.,])/i.test(item.title)) {
+  const aspectRatio = String(item.contentImageAspectRatio || '').toUpperCase();
+  if (aspectRatio.includes('VERTICAL') || aspectRatio.includes('PORTRAIT')) {
     return true;
   }
 

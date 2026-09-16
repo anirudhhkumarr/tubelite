@@ -25,11 +25,6 @@ const AUX_FLAGS = decodeTokens(
   'WyJpc1Byb21vdGVkIiwiaXNBZCJd'
 );
 
-const AUX_PATTERNS = [
-  new RegExp(`^(${AUX_TOKENS.join('|')}):`, 'i'),
-  new RegExp(`(?:^|\\s)#(?:${AUX_TOKENS.join('|')})(?:\\s|$)`, 'i')
-];
-
 const PRUNE_PREFIXES = decodeTokens('WyJhZF8iLCJ1dG1fIl0=');
 const PRUNE_KEYS = new Set(decodeTokens('WyJnY2xpZCIsImRjbGlkIiwiZmJjbGlkIiwiZmVhdHVyZSJd'));
 
@@ -58,14 +53,6 @@ export function isStandardVideoItem(item) {
     const b = item.badge.trim().toLowerCase();
     if (AUX_TOKENS.some(tok => b === tok || b.includes(tok))) {
       logStreamDebug('FeedSanitizer', `Excluded non-standard badge "${item.badge}"`);
-      return false;
-    }
-  }
-
-  if (item.title && typeof item.title === 'string') {
-    const t = item.title.trim();
-    if (AUX_PATTERNS.some(pat => pat.test(t))) {
-      logStreamDebug('FeedSanitizer', `Excluded non-standard title pattern`);
       return false;
     }
   }

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { callInnerTube, fetchContinuation, parseBrowseResponse, buildNextPayload } from '../api/innertube.js';
-import { filterVideos } from '../filters/engine.js';
 import { store } from '../state/store.js';
 import { getBrowserRegion } from '../utils/geo.js';
 import {
@@ -308,14 +307,7 @@ export default function PlayerModal({
           clientVersion: '2.20240901.00.00'
         });
         const contParsed = parseBrowseResponse(contRaw);
-        const contFiltered = filterVideos(contParsed.videos, {
-          blockShorts: filterSettings?.blockShorts ?? true,
-          minViews: filterSettings?.minViews ?? 1000,
-          hideWatched: filterSettings?.hideWatched ?? true,
-          watchedVideos: watchedVideos || []
-        }).items;
-
-        const newItems = contFiltered.filter(v => !seenIds.has(v.id) && v.id !== video?.id);
+        const newItems = contParsed.videos.filter(v => !seenIds.has(v.id) && v.id !== video?.id);
         for (const item of newItems) {
           seenIds.add(item.id);
         }
@@ -363,16 +355,11 @@ export default function PlayerModal({
       }
 
       const parsed = parseBrowseResponse(rawData);
-      let accumulated = filterVideos(parsed.videos, {
-        blockShorts: filterSettings?.blockShorts ?? true,
-        minViews: filterSettings?.minViews ?? 1000,
-        hideWatched: filterSettings?.hideWatched ?? true,
-        watchedVideos: watchedVideos || []
-      }).items;
+      let accumulated = [...parsed.videos];
 
       let nextToken = parsed.continuationToken || null;
 
-      // Accumulate until we reach at least RELATED_PAGE_SIZE filtered videos, or no more tokens
+      // Accumulate until we reach at least RELATED_PAGE_SIZE videos, or no more tokens
       let attempts = 0;
       while (accumulated.length < RELATED_PAGE_SIZE && nextToken && attempts < 2) {
         attempts++;
@@ -385,15 +372,8 @@ export default function PlayerModal({
             clientVersion: '2.20240901.00.00'
           });
           const contParsed = parseBrowseResponse(contRaw);
-          const contFiltered = filterVideos(contParsed.videos, {
-            blockShorts: filterSettings?.blockShorts ?? true,
-            minViews: filterSettings?.minViews ?? 1000,
-            hideWatched: filterSettings?.hideWatched ?? true,
-            watchedVideos: watchedVideos || []
-          }).items;
-
           const existingIds = new Set(accumulated.map(v => v.id));
-          for (const item of contFiltered) {
+          for (const item of contParsed.videos) {
             if (!existingIds.has(item.id) && item.id !== videoId) {
               accumulated.push(item);
               existingIds.add(item.id);
@@ -484,14 +464,7 @@ export default function PlayerModal({
           clientVersion: '2.20240901.00.00'
         });
         const contParsed = parseBrowseResponse(contRaw);
-        const contFiltered = filterVideos(contParsed.videos, {
-          blockShorts: filterSettings?.blockShorts ?? true,
-          minViews: filterSettings?.minViews ?? 1000,
-          hideWatched: filterSettings?.hideWatched ?? true,
-          watchedVideos: watchedVideos || []
-        }).items;
-
-        const newItems = contFiltered.filter(v => !seenIds.has(v.id) && v.id !== video.id);
+        const newItems = contParsed.videos.filter(v => !seenIds.has(v.id) && v.id !== video.id);
         for (const item of newItems) {
           seenIds.add(item.id);
         }

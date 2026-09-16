@@ -5,7 +5,6 @@ import PlayerModal from './components/PlayerModal.jsx';
 import AccountModal from './components/AccountModal.jsx';
 
 import { store } from './state/store.js';
-import { filterVideos } from './filters/engine.js';
 import {
   callInnerTube,
   fetchContinuation,
@@ -116,15 +115,8 @@ export default function App() {
         });
 
         const parsed = parseBrowseResponse(rawData);
-        const filtered = filterVideos(parsed.videos, {
-          blockShorts: filterSettings.blockShorts,
-          minViews: filterSettings.minViews ?? 1000,
-          hideWatched: filterSettings.hideWatched,
-          watchedVideos
-        });
-
         const newItems = [];
-        for (const item of filtered.items) {
+        for (const item of parsed.videos) {
           if (!seenIds.has(item.id)) {
             newItems.push(item);
             seenIds.add(item.id);
@@ -149,15 +141,8 @@ export default function App() {
             clientType: 'TVHTML5'
           }), { workerUrl, accessToken });
           const subParsed = parseBrowseResponse(subRaw);
-          const subFiltered = filterVideos(subParsed.videos, {
-            blockShorts: filterSettings.blockShorts,
-            minViews: filterSettings.minViews ?? 1000,
-            hideWatched: filterSettings.hideWatched,
-            watchedVideos
-          });
-
           const subItems = [];
-          for (const item of subFiltered.items) {
+          for (const item of subParsed.videos) {
             if (!seenIds.has(item.id)) {
               subItems.push(item);
               seenIds.add(item.id);
@@ -235,12 +220,7 @@ export default function App() {
       }
 
       const parsed = parseBrowseResponse(rawData);
-      const accumulated = filterVideos(parsed.videos, {
-        blockShorts: filterSettings.blockShorts,
-        minViews: filterSettings.minViews ?? 1000,
-        hideWatched: filterSettings.hideWatched,
-        watchedVideos
-      }).items;
+      const accumulated = [...parsed.videos];
 
       let nextToken = parsed.continuationToken || null;
       let prevToken = null;
@@ -268,14 +248,7 @@ export default function App() {
             accessToken: isTv ? accessToken : undefined
           });
           const contParsed = parseBrowseResponse(contRaw);
-          const contFiltered = filterVideos(contParsed.videos, {
-            blockShorts: filterSettings.blockShorts,
-            minViews: filterSettings.minViews ?? 1000,
-            hideWatched: filterSettings.hideWatched,
-            watchedVideos
-          }).items;
-
-          for (const item of contFiltered) {
+          for (const item of contParsed.videos) {
             if (!seenIds.has(item.id)) {
               accumulated.push(item);
               seenIds.add(item.id);
@@ -302,14 +275,7 @@ export default function App() {
             clientType: 'TVHTML5'
           }), { workerUrl, accessToken });
           const subParsed = parseBrowseResponse(subRaw);
-          const subFiltered = filterVideos(subParsed.videos, {
-            blockShorts: filterSettings.blockShorts,
-            minViews: filterSettings.minViews ?? 1000,
-            hideWatched: filterSettings.hideWatched,
-            watchedVideos
-          }).items;
-
-          for (const item of subFiltered) {
+          for (const item of subParsed.videos) {
             if (!seenIds.has(item.id)) {
               accumulated.push(item);
               seenIds.add(item.id);
@@ -405,15 +371,8 @@ export default function App() {
         });
 
         const parsed = parseBrowseResponse(rawData);
-        const filtered = filterVideos(parsed.videos, {
-          blockShorts: filterSettings.blockShorts,
-          minViews: filterSettings.minViews ?? 1000,
-          hideWatched: filterSettings.hideWatched,
-          watchedVideos
-        });
-
         const newItems = [];
-        for (const item of filtered.items) {
+        for (const item of parsed.videos) {
           if (!seenIds.has(item.id)) {
             newItems.push(item);
             seenIds.add(item.id);
@@ -438,15 +397,8 @@ export default function App() {
             clientType: 'TVHTML5'
           }), { workerUrl, accessToken });
           const subParsed = parseBrowseResponse(subRaw);
-          const subFiltered = filterVideos(subParsed.videos, {
-            blockShorts: filterSettings.blockShorts,
-            minViews: filterSettings.minViews ?? 1000,
-            hideWatched: filterSettings.hideWatched,
-            watchedVideos
-          });
-
           const subItems = [];
-          for (const item of subFiltered.items) {
+          for (const item of subParsed.videos) {
             if (!seenIds.has(item.id)) {
               subItems.push(item);
               seenIds.add(item.id);

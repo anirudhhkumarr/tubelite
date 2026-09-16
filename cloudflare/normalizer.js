@@ -134,7 +134,8 @@ export function extractWatchedAnnotation(renderer, overlays = []) {
  * Determines if an item is a YouTube Short.
  */
 export function isShortVideo(item) {
-  if (!item) return false;
+  if (!item || typeof item !== 'object') return false;
+  if (item.isShort === true) return true;
   if (item.reelItemRenderer || item.shortsLockupViewModel) return true;
 
   const renderer =
@@ -149,14 +150,26 @@ export function isShortVideo(item) {
     (item.metadata?.tileMetadataRenderer ? item : null);
 
   const target = renderer || item;
+  if (target.isShort === true) return true;
 
-  // 1. ContentType check
-  const contentType = String(target.contentType || '').toUpperCase();
+  // 1. ContentType enum check
+  const contentType = String(target.contentType || item.contentType || '').toUpperCase();
   if (contentType.includes('SHORT') || contentType.includes('REEL')) {
     return true;
   }
 
-  // 2. Overlays check
+  // 2. Aspect ratio enum check (e.g. LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_VERTICAL / PORTRAIT)
+  const aspectRatio = String(
+    target.contentImage?.thumbnailViewModel?.contentImageAspectRatio ||
+    target.contentImageAspectRatio ||
+    target.thumbnail?.contentImageAspectRatio ||
+    ''
+  ).toUpperCase();
+  if (aspectRatio.includes('VERTICAL') || aspectRatio.includes('PORTRAIT')) {
+    return true;
+  }
+
+  // 3. Overlays check
   const overlays =
     target.thumbnailOverlays ||
     target.header?.tileHeaderRenderer?.thumbnailOverlays ||
@@ -178,8 +191,7 @@ export function isShortVideo(item) {
     }
   }
 
-
-  // 4. Navigation URL or reelWatchEndpoint check
+  // 4. Navigation URL, reelWatchEndpoint, and player style/type enums
   const onTap =
     target.onSelectCommand ||
     target.navigationEndpoint ||
@@ -189,6 +201,20 @@ export function isShortVideo(item) {
   if (onTap?.reelWatchEndpoint) return true;
   const navUrl = onTap?.commandMetadata?.webCommandMetadata?.url || '';
   if (navUrl.includes('/shorts/')) return true;
+
+  const reelStyle = String(
+    onTap?.reelWatchEndpoint?.overlay?.reelPlayerOverlayRenderer?.style ||
+    target.overlay?.reelPlayerOverlayRenderer?.style ||
+    ''
+  ).toUpperCase();
+  if (reelStyle.includes('SHORTS')) return true;
+
+  const videoType = String(
+    onTap?.reelWatchEndpoint?.videoType ||
+    target.videoType ||
+    ''
+  ).toUpperCase();
+  if (videoType.includes('REEL')) return true;
 
   // 5. Duration check (< 60s is considered a short)
   let durationStr = '';

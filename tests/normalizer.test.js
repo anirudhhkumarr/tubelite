@@ -86,6 +86,51 @@ describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => 
       assert.equal(isShortVideo({ tileRenderer: { onSelectCommand: { reelWatchEndpoint: { videoId: 'reel_2' } } } }), true);
     });
 
+    it('detects vertical / portrait aspect ratio enums as shorts', () => {
+      assert.equal(isShortVideo({
+        lockupViewModel: {
+          contentImage: {
+            thumbnailViewModel: {
+              contentImageAspectRatio: 'LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_VERTICAL'
+            }
+          }
+        }
+      }), true);
+      assert.equal(isShortVideo({
+        tileRenderer: {
+          contentImageAspectRatio: 'LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_PORTRAIT'
+        }
+      }), true);
+    });
+
+    it('detects reel player overlay style and videoType enums as shorts', () => {
+      assert.equal(isShortVideo({
+        videoRenderer: {
+          overlay: {
+            reelPlayerOverlayRenderer: {
+              style: 'REEL_PLAYER_OVERLAY_STYLE_SHORTS'
+            }
+          }
+        }
+      }), true);
+      assert.equal(isShortVideo({
+        videoRenderer: {
+          videoType: 'REEL_VIDEO_TYPE_VIDEO'
+        }
+      }), true);
+      assert.equal(isShortVideo({
+        videoRenderer: {
+          navigationEndpoint: {
+            commandMetadata: {
+              webCommandMetadata: {
+                url: '/shorts/abcdef123'
+              }
+            }
+          }
+        }
+      }), true);
+    });
+
     it('detects duration < 60s as shorts', () => {
       assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '0:45' } } }), true);
       assert.equal(isShortVideo({ videoRenderer: { lengthText: { simpleText: '0:59' } } }), true);

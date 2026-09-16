@@ -46,8 +46,8 @@ describe('Filter Engine - Shorts Detection', () => {
     assert.equal(isShort({ url: 'https://youtube.com/shorts/abc123xyz' }), true);
     assert.equal(isShort({ badge: 'SHORTS' }), true);
     assert.equal(isShort({ duration: 'SHORTS' }), true);
-    assert.equal(isShort({ title: 'Amazing science trick #shorts you must try' }), true);
-    assert.equal(isShort({ title: 'Best Moments #short' }), true);
+    assert.equal(isShort({ contentImageAspectRatio: 'LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_VERTICAL' }), true);
+    assert.equal(isShort({ contentImageAspectRatio: 'LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_PORTRAIT' }), true);
   });
 
   it('detects videos shorter than 60 seconds as shorts', () => {

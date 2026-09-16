@@ -1,9 +1,10 @@
 // sanitizer.js
 
 export function isShortVideo(item) {
-  if (!item) return false;
+  if (!item || typeof item !== 'object') return false;
+  if (item.isShort === true) return true;
   // Check for reelItemRenderer (always a short)
-  if (item.reelItemRenderer) return true;
+  if (item.reelItemRenderer || item.shortsLockupViewModel) return true;
 
   // For standard videoRenderers, compactVideoRenderers, gridVideoRenderer, or tileRenderer
   const renderer =
@@ -11,33 +12,80 @@ export function isShortVideo(item) {
     item.compactVideoRenderer ||
     item.gridVideoRenderer ||
     item.tileRenderer ||
+    item.lockupViewModel ||
     item.movieRenderer ||
     item.compactMovieRenderer ||
     item.gridMovieRenderer ||
     (item.metadata?.tileMetadataRenderer ? item : null);
 
-  if (!renderer) return false;
+  const target = renderer || item;
+  if (target.isShort === true) return true;
 
+  // 1. ContentType enum check
+  const contentType = String(target.contentType || item.contentType || '').toUpperCase();
+  if (contentType.includes('SHORT') || contentType.includes('REEL')) {
+    return true;
+  }
+
+  // 2. Aspect ratio enum check (e.g. LOCKUP_CONTENT_IMAGE_ASPECT_RATIO_VERTICAL / PORTRAIT)
+  const aspectRatio = String(
+    target.contentImage?.thumbnailViewModel?.contentImageAspectRatio ||
+    target.contentImageAspectRatio ||
+    target.thumbnail?.contentImageAspectRatio ||
+    ''
+  ).toUpperCase();
+  if (aspectRatio.includes('VERTICAL') || aspectRatio.includes('PORTRAIT')) {
+    return true;
+  }
+
+  // 3. Overlays check
   const overlays =
-    renderer.thumbnailOverlays ||
-    renderer.header?.tileHeaderRenderer?.thumbnailOverlays ||
+    target.thumbnailOverlays ||
+    target.header?.tileHeaderRenderer?.thumbnailOverlays ||
+    target.contentImage?.thumbnailViewModel?.overlays ||
     [];
 
   for (const ov of overlays) {
-    const style = ov?.thumbnailOverlayTimeStatusRenderer?.style || '';
-    const timeText =
+    const style = (ov?.thumbnailOverlayTimeStatusRenderer?.style || '').toUpperCase();
+    const timeText = (
       ov?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText ||
       ov?.thumbnailOverlayTimeStatusRenderer?.text?.runs?.[0]?.text ||
-      '';
-    if (style.toUpperCase() === 'SHORTS' || timeText.toUpperCase() === 'SHORTS') {
+      ''
+    ).toUpperCase();
+    if (style === 'SHORTS' || timeText === 'SHORTS') {
       return true;
     }
   }
 
-  // Check lengthText directly if available
+  // 4. Navigation URL, reelWatchEndpoint, and player style/type enums
+  const onTap =
+    target.onSelectCommand ||
+    target.navigationEndpoint ||
+    target.rendererContext?.commandContext?.onTap?.innertubeCommand ||
+    target.onTap?.innertubeCommand;
+
+  if (onTap?.reelWatchEndpoint) return true;
+  const navUrl = onTap?.commandMetadata?.webCommandMetadata?.url || '';
+  if (navUrl.includes('/shorts/')) return true;
+
+  const reelStyle = String(
+    onTap?.reelWatchEndpoint?.overlay?.reelPlayerOverlayRenderer?.style ||
+    target.overlay?.reelPlayerOverlayRenderer?.style ||
+    ''
+  ).toUpperCase();
+  if (reelStyle.includes('SHORTS')) return true;
+
+  const videoType = String(
+    onTap?.reelWatchEndpoint?.videoType ||
+    target.videoType ||
+    ''
+  ).toUpperCase();
+  if (videoType.includes('REEL')) return true;
+
+  // 5. Duration check (< 60s is considered a short)
   let durationStr = '';
-  if (renderer.lengthText) {
-    durationStr = renderer.lengthText.simpleText || renderer.lengthText.runs?.[0]?.text || '';
+  if (target.lengthText) {
+    durationStr = target.lengthText.simpleText || target.lengthText.runs?.[0]?.text || '';
   }
 
   if (durationStr && durationStr.split(':').length === 2) {
@@ -45,7 +93,7 @@ export function isShortVideo(item) {
     const m = parseInt(parts[0], 10);
     const s = parseInt(parts[1], 10);
     if (!isNaN(m) && !isNaN(s) && (m * 60 + s) < 60) {
-      return true; // less than 60s is considered a short
+      return true;
     }
   }
 
