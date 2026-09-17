@@ -838,13 +838,14 @@ public class TubeLiteGatewayClient: ObservableObject {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let isAuth = DeviceAuthService.shared.isSignedIn && DeviceAuthService.shared.accessToken != nil
+        let token = await DeviceAuthService.shared.getValidAccessToken()
+        let isAuth = token != nil
         let clientName = isAuth ? "TVHTML5" : "WEB"
         let clientVer = isAuth ? "7.20240901.00.00" : "2.20240901.00.00"
         
         request.setValue(clientName, forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(clientVer, forHTTPHeaderField: "X-YouTube-Client-Version")
-        if let token = DeviceAuthService.shared.accessToken {
+        if let token = token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -875,6 +876,10 @@ public class TubeLiteGatewayClient: ObservableObject {
                 if isAuth && self.homeVideos.count < 12 && !self.hasBridgedToSubscriptions {
                     await self.bridgeToSubscriptions()
                 }
+            } else if (response as? HTTPURLResponse)?.statusCode == 401 && isAuth {
+                print("[TubeLiteTV] 401 received with auth token. Signing out and retrying unauthenticated guest browse.")
+                DeviceAuthService.shared.signOut()
+                await self.fetchHomeFeedGuest(url: url)
             } else {
                 self.errorMessage = "Failed to load home feed (status: \((response as? HTTPURLResponse)?.statusCode ?? 0))"
             }
@@ -884,12 +889,49 @@ public class TubeLiteGatewayClient: ObservableObject {
         
         self.isLoading = false
     }
+
+    private func fetchHomeFeedGuest(url: URL) async {
+        var guestRequest = URLRequest(url: url)
+        guestRequest.httpMethod = "POST"
+        guestRequest.cachePolicy = .reloadIgnoringLocalCacheData
+        guestRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        guestRequest.setValue("WEB", forHTTPHeaderField: "X-YouTube-Client-Name")
+        guestRequest.setValue("2.20240901.00.00", forHTTPHeaderField: "X-YouTube-Client-Version")
+        
+        let guestPayload: [String: Any] = [
+            "context": [
+                "client": [
+                    "clientName": "WEB",
+                    "clientVersion": "2.20240901.00.00",
+                    "hl": "en",
+                    "gl": "US"
+                ]
+            ],
+            "browseId": "FEwhat_to_watch"
+        ]
+        
+        do {
+            guestRequest.httpBody = try JSONSerialization.data(withJSONObject: guestPayload)
+            let (data, response) = try await session.data(for: guestRequest)
+            if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
+                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                self.homeContinuationToken = feed.continuationToken
+                self.homeVideos = feed.items
+                self.lastHomeFeedAt = Date()
+            } else {
+                self.errorMessage = "Failed to load home feed (status: \((response as? HTTPURLResponse)?.statusCode ?? 0))"
+            }
+        } catch {
+            self.errorMessage = "Network error: \(error.localizedDescription)"
+        }
+    }
     
     // MARK: - Infinite Scroll (Load More Home)
     
     public func fetchMoreHomeFeed() async {
         guard !isLoadingMore else { return }
-        let isAuth = DeviceAuthService.shared.isSignedIn && DeviceAuthService.shared.accessToken != nil
+        let token = await DeviceAuthService.shared.getValidAccessToken()
+        let isAuth = token != nil
 
         // If recommendations continuation ran out, seamlessly extend via Subscriptions
         if homeContinuationToken == nil {
@@ -901,7 +943,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             return
         }
 
-        guard let token = homeContinuationToken else { return }
+        guard let currentContinuationToken = homeContinuationToken else { return }
         isLoadingMore = true
         
         let endpoint = "\(Self.defaultGatewayUrl)/api/innertube/browse"
@@ -919,7 +961,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         request.setValue(clientName, forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(clientVer, forHTTPHeaderField: "X-YouTube-Client-Version")
         
-        if isAuth, let token = DeviceAuthService.shared.accessToken {
+        if isAuth, let token = token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -932,7 +974,7 @@ public class TubeLiteGatewayClient: ObservableObject {
                     "gl": "US"
                 ]
             ],
-            "continuation": token
+            "continuation": currentContinuationToken
         ]
         
         do {
@@ -951,6 +993,34 @@ public class TubeLiteGatewayClient: ObservableObject {
                 if feed.continuationToken == nil && isAuth && !self.hasBridgedToSubscriptions {
                     await self.bridgeToSubscriptions()
                 }
+            } else if (response as? HTTPURLResponse)?.statusCode == 401 && isAuth {
+                print("[TubeLiteTV] 401 on continuation. Signing out and retrying as unauthenticated guest.")
+                DeviceAuthService.shared.signOut()
+                var guestRequest = URLRequest(url: url)
+                guestRequest.httpMethod = "POST"
+                guestRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                guestRequest.setValue("WEB", forHTTPHeaderField: "X-YouTube-Client-Name")
+                guestRequest.setValue("2.20240901.00.00", forHTTPHeaderField: "X-YouTube-Client-Version")
+                let guestPayload: [String: Any] = [
+                    "context": [
+                        "client": [
+                            "clientName": "WEB",
+                            "clientVersion": "2.20240901.00.00",
+                            "hl": "en",
+                            "gl": "US"
+                        ]
+                    ],
+                    "continuation": currentContinuationToken
+                ]
+                guestRequest.httpBody = try? JSONSerialization.data(withJSONObject: guestPayload)
+                if let (guestData, guestRes) = try? await session.data(for: guestRequest),
+                   (guestRes as? HTTPURLResponse)?.statusCode == 200,
+                   let guestFeed = try? JSONDecoder().decode(FeedResponse.self, from: guestData) {
+                    self.homeContinuationToken = guestFeed.continuationToken
+                    let existingIds = Set(self.homeVideos.map { $0.id })
+                    let uniqueNew = guestFeed.items.filter { !existingIds.contains($0.id) }
+                    self.homeVideos.append(contentsOf: uniqueNew)
+                }
             }
         } catch {
             print("[TubeLiteTV] Continuation error: \(error)")
@@ -967,6 +1037,8 @@ public class TubeLiteGatewayClient: ObservableObject {
         guard !hasBridgedToSubscriptions else { return }
         self.hasBridgedToSubscriptions = true
         
+        guard let token = await DeviceAuthService.shared.getValidAccessToken() else { return }
+        
         let endpoint = "\(Self.defaultGatewayUrl)/api/innertube/browse"
         guard let url = URL(string: endpoint) else { return }
         
@@ -975,10 +1047,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("TVHTML5", forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue("7.20260301.12.00", forHTTPHeaderField: "X-YouTube-Client-Version")
-        
-        if let token = DeviceAuthService.shared.accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
         let payload: [String: Any] = [
             "context": [
@@ -1003,6 +1072,9 @@ public class TubeLiteGatewayClient: ObservableObject {
                 if self.homeContinuationToken == nil {
                     self.homeContinuationToken = feed.continuationToken
                 }
+            } else if (response as? HTTPURLResponse)?.statusCode == 401 {
+                print("[TubeLiteTV] 401 on bridgeToSubscriptions. Signing out.")
+                DeviceAuthService.shared.signOut()
             }
         } catch {
             print("[TubeLiteTV] Bridge to subscriptions failed: \(error)")

@@ -19,11 +19,15 @@ public class DeviceAuthService: ObservableObject {
     @Published public var isPolling: Bool = false
     @Published public var authError: String? = nil
     @Published public var accessToken: String? = nil
+    @Published public var expiresAt: Date? = nil
     
     private var pollTask: Task<Void, Never>? = nil
+    private var refreshTask: Task<String?, Never>? = nil
     
     private let tokenKey = "tubelite_tv_access_token"
     private let refreshTokenKey = "tubelite_tv_refresh_token"
+    private let expiresAtKey = "tubelite_tv_expires_at"
+    private let refreshBufferSec: TimeInterval = 300 // 5-minute buffer matching Web REFRESH_BUFFER_MS
     
     public init() {
         loadSavedSession()
@@ -33,9 +37,16 @@ public class DeviceAuthService: ObservableObject {
         if let token = UserDefaults.standard.string(forKey: tokenKey), !token.isEmpty {
             self.accessToken = token
             self.isSignedIn = true
+            let exp = UserDefaults.standard.double(forKey: expiresAtKey)
+            if exp > 0 {
+                self.expiresAt = Date(timeIntervalSince1970: exp)
+            } else {
+                self.expiresAt = nil
+            }
         } else {
             self.isSignedIn = false
             self.accessToken = nil
+            self.expiresAt = nil
         }
     }
     
@@ -109,10 +120,14 @@ public class DeviceAuthService: ObservableObject {
                     
                     if (response as? HTTPURLResponse)?.statusCode == 200,
                        let accessToken = json["access_token"] as? String {
+                        let expiresIn = (json["expires_in"] as? Double) ?? 3600
+                        let expiryDate = Date().addingTimeInterval(expiresIn)
                         self.accessToken = accessToken
+                        self.expiresAt = expiryDate
                         self.isSignedIn = true
                         self.isPolling = false
                         UserDefaults.standard.set(accessToken, forKey: self.tokenKey)
+                        UserDefaults.standard.set(expiryDate.timeIntervalSince1970, forKey: self.expiresAtKey)
                         if let refreshToken = json["refresh_token"] as? String {
                             UserDefaults.standard.set(refreshToken, forKey: self.refreshTokenKey)
                         }
@@ -151,12 +166,16 @@ public class DeviceAuthService: ObservableObject {
     public func signOut() {
         pollTask?.cancel()
         pollTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
         self.accessToken = nil
+        self.expiresAt = nil
         self.isSignedIn = false
         self.userCode = ""
         self.isPolling = false
         UserDefaults.standard.removeObject(forKey: tokenKey)
         UserDefaults.standard.removeObject(forKey: refreshTokenKey)
+        UserDefaults.standard.removeObject(forKey: expiresAtKey)
     }
     
     public func cancel() {
@@ -164,5 +183,91 @@ public class DeviceAuthService: ObservableObject {
         pollTask = nil
         self.isPolling = false
         self.userCode = ""
+    }
+
+    // MARK: - Proactive Token Refresh (Matching Web getValidAccessToken)
+
+    /// Returns a valid access token, silently refreshing via Google OAuth when near expiry (within 5 minutes).
+    /// Multiple concurrent callers share the same in-flight refresh Task.
+    /// Returns nil and clears session if refresh fails or no credentials exist.
+    public func getValidAccessToken() async -> String? {
+        guard isSignedIn, let currentToken = accessToken else {
+            return nil
+        }
+
+        let nearExpiry: Bool
+        if let exp = expiresAt {
+            nearExpiry = Date().addingTimeInterval(refreshBufferSec) >= exp
+        } else {
+            // No expiration recorded (e.g. upgraded session) -> refresh if refresh_token exists
+            nearExpiry = true
+        }
+
+        if !nearExpiry {
+            return currentToken
+        }
+
+        guard let refreshToken = UserDefaults.standard.string(forKey: refreshTokenKey), !refreshToken.isEmpty else {
+            signOut()
+            return nil
+        }
+
+        if let inFlight = refreshTask {
+            return await inFlight.value
+        }
+
+        let task = Task<String?, Never> { @MainActor [weak self] in
+            guard let self = self else { return nil }
+            return await self.performTokenRefresh(refreshToken: refreshToken)
+        }
+        self.refreshTask = task
+        let result = await task.value
+        self.refreshTask = nil
+        return result
+    }
+
+    private func performTokenRefresh(refreshToken: String) async -> String? {
+        guard let url = URL(string: Self.tokenUrl) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let bodyString = "client_id=\(Self.clientId)&client_secret=\(Self.clientSecret)&refresh_token=\(refreshToken)&grant_type=refresh_token"
+        request.httpBody = bodyString.data(using: .utf8)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpRes = response as? HTTPURLResponse,
+                  httpRes.statusCode == 200,
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let newAccessToken = json["access_token"] as? String else {
+                print("[TubeLiteTV] Token refresh rejected by server. Clearing session.")
+                self.signOut()
+                return nil
+            }
+
+            let expiresIn = (json["expires_in"] as? Double) ?? 3600
+            let expiryDate = Date().addingTimeInterval(expiresIn)
+
+            self.accessToken = newAccessToken
+            self.expiresAt = expiryDate
+            self.isSignedIn = true
+
+            UserDefaults.standard.set(newAccessToken, forKey: self.tokenKey)
+            UserDefaults.standard.set(expiryDate.timeIntervalSince1970, forKey: self.expiresAtKey)
+            if let newRefreshToken = json["refresh_token"] as? String, !newRefreshToken.isEmpty {
+                UserDefaults.standard.set(newRefreshToken, forKey: self.refreshTokenKey)
+            }
+
+            return newAccessToken
+        } catch {
+            print("[TubeLiteTV] Network error during token refresh: \(error.localizedDescription)")
+            if let exp = self.expiresAt, Date() >= exp {
+                self.signOut()
+                return nil
+            }
+            return self.accessToken
+        }
     }
 }
