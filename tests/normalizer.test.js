@@ -16,15 +16,21 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const fixturesDir = path.resolve(__dirname, 'fixtures');
 const scratchDir = path.resolve(__dirname, '../scratch');
 
-function loadScratchJson(filename) {
-  const filePath = path.join(scratchDir, filename);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Required test fixture not found: ${filePath}`);
+function loadFixtureJson(filename) {
+  const fixturePath = path.join(fixturesDir, filename);
+  if (fs.existsSync(fixturePath)) {
+    return JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
   }
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  const scratchPath = path.join(scratchDir, filename);
+  if (fs.existsSync(scratchPath)) {
+    return JSON.parse(fs.readFileSync(scratchPath, 'utf8'));
+  }
+  throw new Error(`Required test fixture not found: ${fixturePath}`);
 }
+const loadScratchJson = loadFixtureJson;
 
 describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => {
   describe('Helper Utilities', () => {
@@ -178,7 +184,7 @@ describe('Cloudflare Worker Normalizer - Enterprise Parsing & Filtering', () => 
     });
   });
 
-  describe('Empirical Real-World Corpus Validation (Scratch Dumps)', () => {
+  describe('Empirical Real-World Corpus Validation (Corpus Fixtures)', () => {
     it('normalizes authentic Home Recommendations feed (browse_what_to_watch_page_1.json)', () => {
       const raw = loadScratchJson('browse_what_to_watch_page_1.json');
       const feed = normalizeFeedResponse(raw);
