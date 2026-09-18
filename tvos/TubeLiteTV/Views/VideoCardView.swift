@@ -37,6 +37,8 @@ public struct VideoCardView: View {
         .frame(width: compact ? TLTheme.relatedCardWidth : nil, alignment: .topLeading)
         .frame(maxWidth: compact ? TLTheme.relatedCardWidth : .infinity, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
+        .scaleEffect(isFocused ? 1.07 : 0.94)
+        .zIndex(isFocused ? 10 : 1)
         .animation(TLTheme.spring, value: isFocused)
         .task(id: isFocused) {
             guard isFocused else {
@@ -93,7 +95,7 @@ public struct VideoCardView: View {
             RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous)
                 .strokeBorder(isFocused ? Color.white : Color.clear, lineWidth: 3)
         )
-        .scaleEffect(isFocused ? 1.04 : 1.0)
+        .shadow(color: isFocused ? Color.black.opacity(0.45) : Color.clear, radius: 14, x: 0, y: 8)
         .contentShape(RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous))
     }
     

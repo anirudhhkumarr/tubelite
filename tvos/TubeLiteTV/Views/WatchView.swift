@@ -344,7 +344,7 @@ public struct WatchView: View {
                     RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous)
                         .strokeBorder(isHomeButtonFocused ? Color.white : Color.clear, lineWidth: 3)
                 )
-                .scaleEffect(isHomeButtonFocused ? 1.04 : 1.0)
+                .shadow(color: isHomeButtonFocused ? Color.black.opacity(0.45) : Color.clear, radius: 14, x: 0, y: 8)
                 .contentShape(RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous))
             }
             .buttonStyle(TLBareButtonStyle())
@@ -357,6 +357,8 @@ public struct WatchView: View {
                 .frame(width: 200, height: TLTheme.relatedMetaHeight)
         }
         .frame(width: 200, alignment: .topLeading)
+        .scaleEffect(isHomeButtonFocused ? 1.07 : 0.94)
+        .zIndex(isHomeButtonFocused ? 10 : 1)
         .animation(TLTheme.spring, value: isHomeButtonFocused)
     }
     
