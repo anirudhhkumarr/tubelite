@@ -6,28 +6,32 @@ public struct VideoCardView: View {
     public let video: VideoItem
     public let compact: Bool
     public let onSelect: (VideoItem) -> Void
+    public var focusedId: FocusState<String?>.Binding?
     
-    @FocusState private var isFocused: Bool
+    @FocusState private var isFocusedInternal: Bool
     
-    public init(video: VideoItem, compact: Bool = false, onSelect: @escaping (VideoItem) -> Void) {
+    private var isFocused: Bool {
+        if let focusedId = focusedId {
+            return focusedId.wrappedValue == video.id
+        }
+        return isFocusedInternal
+    }
+    
+    public init(
+        video: VideoItem,
+        compact: Bool = false,
+        focusedId: FocusState<String?>.Binding? = nil,
+        onSelect: @escaping (VideoItem) -> Void
+    ) {
         self.video = video
         self.compact = compact
+        self.focusedId = focusedId
         self.onSelect = onSelect
     }
     
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                onSelect(video)
-            } label: {
-                thumbContent
-            }
-            .buttonStyle(TLBareButtonStyle())
-            .focused($isFocused)
-            .focusEffectDisabled(true)
-            .hoverEffectDisabled(true)
-            .accessibilityLabel(video.title)
-            
+            cardButton
             metadata
         }
         .frame(width: compact ? TLTheme.relatedCardWidth : nil, alignment: .topLeading)
@@ -43,6 +47,33 @@ public struct VideoCardView: View {
             try? await Task.sleep(nanoseconds: PlaybackPreloadCache.focusDwellDelayNanoseconds)
             guard !Task.isCancelled else { return }
             PlaybackPreloadCache.shared.preload(videoId: video.id)
+        }
+    }
+    
+    @ViewBuilder
+    private var cardButton: some View {
+        if let focusedId = focusedId {
+            Button {
+                onSelect(video)
+            } label: {
+                thumbContent
+            }
+            .buttonStyle(TLBareButtonStyle())
+            .focused(focusedId, equals: video.id)
+            .focusEffectDisabled(true)
+            .hoverEffectDisabled(true)
+            .accessibilityLabel(video.title)
+        } else {
+            Button {
+                onSelect(video)
+            } label: {
+                thumbContent
+            }
+            .buttonStyle(TLBareButtonStyle())
+            .focused($isFocusedInternal)
+            .focusEffectDisabled(true)
+            .hoverEffectDisabled(true)
+            .accessibilityLabel(video.title)
         }
     }
     

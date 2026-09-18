@@ -7,10 +7,17 @@ public struct WatchView: View {
     public let onOpenAccount: () -> Void
     public let onDismiss: () -> Void
     
+    private struct VideoHistoryEntry {
+        let video: VideoItem
+        let related: [VideoItem]
+    }
+    
     @State private var currentVideo: VideoItem
     @State private var related: [VideoItem] = []
+    @State private var history: [VideoHistoryEntry] = []
     @State private var isLoadingRelated = true
     @State private var isPlaying = true
+    @State private var scrollTargetId: String? = nil
     
     @State private var lastDiagnostics: TubeLiteGatewayClient.PlaybackDiagnostics? = nil
     @State private var lastAVPlayerLog: String? = nil
@@ -19,6 +26,8 @@ public struct WatchView: View {
     @FocusState private var heroFocused: Bool
     @FocusState private var logsButtonFocused: Bool
     @FocusState private var logsCloseFocused: Bool
+    @FocusState private var isHomeButtonFocused: Bool
+    @FocusState private var focusedRelatedVideoId: String?
     
     public init(
         video: VideoItem,
@@ -107,7 +116,7 @@ public struct WatchView: View {
         .fullScreenCover(isPresented: $showLogs) {
             logsSheet
         }
-        .fullScreenCover(isPresented: $isPlaying, onDismiss: restoreFocus) {
+        .fullScreenCover(isPresented: $isPlaying, onDismiss: resetTrayToStart) {
             PlayerView(
                 videoId: currentVideo.id,
                 onOpenAccount: {
@@ -125,12 +134,17 @@ public struct WatchView: View {
         .onExitCommand {
             if isPlaying {
                 isPlaying = false
+            } else if let previous = history.popLast() {
+                currentVideo = previous.video
+                related = previous.related
+                isLoadingRelated = false
+                resetTrayToStart()
             } else {
                 onDismiss()
             }
         }
         .onChange(of: isPlaying) { _, playing in
-            if !playing { restoreFocus() }
+            if !playing { resetTrayToStart() }
         }
         .onChange(of: currentVideo.id) { _, _ in
             lastDiagnostics = nil
@@ -157,6 +171,9 @@ public struct WatchView: View {
             guard !Task.isCancelled else { return }
             related = r
             isLoadingRelated = false
+            if !isPlaying {
+                resetTrayToStart()
+            }
         }
     }
     
@@ -264,25 +281,112 @@ public struct WatchView: View {
     
     @ViewBuilder
     private var relatedSection: some View {
-        if isLoadingRelated && relatedItems.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.top, 12)
-        } else if !relatedItems.isEmpty {
-            // Same card chrome as Home, but a single horizontal tray.
+        ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: TLTheme.gridGap) {
-                    ForEach(relatedItems) { item in
-                        VideoCardView(video: item, compact: true) { selected in
-                            currentVideo = selected
-                            isPlaying = true
+                    homeTrayButton
+                        .id("tray_home")
+                    
+                    if isLoadingRelated && relatedItems.isEmpty {
+                        ProgressView()
+                            .frame(width: 120, height: TLTheme.relatedThumbHeight)
+                    } else {
+                        ForEach(relatedItems) { item in
+                            VideoCardView(
+                                video: item,
+                                compact: true,
+                                focusedId: $focusedRelatedVideoId
+                            ) { selected in
+                                selectRelatedVideo(selected)
+                            }
+                            .id(item.id)
                         }
                     }
                 }
                 .padding(.horizontal, TLTheme.pageInset)
                 .padding(.vertical, 8)
             }
-            .focusSection()
+            .id("related_scroll_\(currentVideo.id)")
+            .onChange(of: scrollTargetId) { _, target in
+                if let target {
+                    withAnimation(TLTheme.spring) {
+                        proxy.scrollTo(target, anchor: .leading)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        if scrollTargetId == target {
+                            scrollTargetId = nil
+                        }
+                    }
+                }
+            }
+        }
+        .focusSection()
+    }
+    
+    private var homeTrayButton: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                onDismiss()
+            } label: {
+                VStack(spacing: 12) {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundColor(isHomeButtonFocused ? TLTheme.accent : TLTheme.textPrimary)
+                    
+                    Text("Home")
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(isHomeButtonFocused ? TLTheme.accent : TLTheme.textPrimary)
+                }
+                .frame(width: 200, height: TLTheme.relatedThumbHeight)
+                .background(isHomeButtonFocused ? Color.white.opacity(0.18) : TLTheme.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous)
+                        .strokeBorder(isHomeButtonFocused ? Color.white : Color.clear, lineWidth: 3)
+                )
+                .scaleEffect(isHomeButtonFocused ? 1.04 : 1.0)
+                .contentShape(RoundedRectangle(cornerRadius: TLTheme.radiusThumb, style: .continuous))
+            }
+            .buttonStyle(TLBareButtonStyle())
+            .focused($isHomeButtonFocused)
+            .focusEffectDisabled(true)
+            .hoverEffectDisabled(true)
+            .accessibilityLabel("Return to Home feed")
+            
+            Color.clear
+                .frame(width: 200, height: TLTheme.relatedMetaHeight)
+        }
+        .frame(width: 200, alignment: .topLeading)
+        .animation(TLTheme.spring, value: isHomeButtonFocused)
+    }
+    
+    private func selectRelatedVideo(_ selected: VideoItem) {
+        history.append(VideoHistoryEntry(video: currentVideo, related: related))
+        currentVideo = selected
+        isPlaying = true
+    }
+    
+    private func resetTrayToStart() {
+        scrollTargetId = "tray_home"
+        focusFirstRecommended()
+    }
+    
+    private func focusFirstRecommended() {
+        guard let firstId = relatedItems.first?.id else {
+            if !isPlaying {
+                isHomeButtonFocused = true
+            }
+            return
+        }
+        DispatchQueue.main.async {
+            focusedRelatedVideoId = firstId
+            scrollTargetId = "tray_home"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if !isPlaying && focusedRelatedVideoId != firstId {
+                focusedRelatedVideoId = firstId
+                scrollTargetId = "tray_home"
+            }
         }
     }
     
@@ -316,17 +420,6 @@ public struct WatchView: View {
             try? await Task.sleep(nanoseconds: PlaybackPreloadCache.focusDwellDelayNanoseconds)
             guard !Task.isCancelled else { return }
             PlaybackPreloadCache.shared.preload(videoId: currentVideo.id)
-        }
-    }
-    
-    private func restoreFocus() {
-        DispatchQueue.main.async {
-            heroFocused = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            if !heroFocused {
-                heroFocused = true
-            }
         }
     }
 }
