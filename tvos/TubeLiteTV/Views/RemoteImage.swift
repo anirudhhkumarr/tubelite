@@ -101,7 +101,8 @@ public struct RemoteImage: View {
                     continue
                 }
                 
-                guard let decoded = UIImage(data: data) else {
+                // Decode image off the main thread to avoid blocking UI during rapid thumbnail loading.
+                guard let decoded = await Self.decodeImage(data: data) else {
                     continue
                 }
                 
@@ -134,6 +135,13 @@ public struct RemoteImage: View {
                 continue
             }
         }
+    }
+    
+    /// Decode UIImage on a background thread to keep thumbnail-heavy grids responsive.
+    private static func decodeImage(data: Data) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) {
+            UIImage(data: data)
+        }.value
     }
     
     private var placeholder: some View {

@@ -283,7 +283,8 @@ public struct WatchView: View {
     private var relatedSection: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: TLTheme.gridGap) {
+                // Measure the tallest metadata block before sizing the scroll viewport.
+                HStack(alignment: .top, spacing: TLTheme.gridGap) {
                     homeTrayButton
                         .id("tray_home")
                     
@@ -305,7 +306,8 @@ public struct WatchView: View {
                 }
                 .padding(.horizontal, TLTheme.pageInset)
                 .padding(.top, 28)
-                .padding(.bottom, 8)
+                // Focus scales the whole card beyond its layout bounds.
+                .padding(.bottom, 28)
             }
             .id("related_scroll_\(currentVideo.id)")
             .onChange(of: scrollTargetId) { _, target in

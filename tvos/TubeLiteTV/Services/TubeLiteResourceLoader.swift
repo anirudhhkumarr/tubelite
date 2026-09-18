@@ -222,16 +222,44 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
             }
         }
         
-        let keptMedia = mediaTags.compactMap { tag -> String? in
+        var rawKeptAudio: [String] = []
+        for tag in mediaTags {
             let type = attributeValue(from: tag, name: "TYPE")?.uppercased()
-            guard type == "AUDIO" else { return nil }
-            guard let group = attributeValue(from: tag, name: "GROUP-ID") else { return nil }
-            guard neededAudioGroups.contains(group) else { return nil }
+            guard type == "AUDIO" else { continue }
+            guard let group = attributeValue(from: tag, name: "GROUP-ID") else { continue }
+            guard neededAudioGroups.contains(group) else { continue }
             if let base = baseURL, let rawURI = attributeValue(from: tag, name: "URI"), !rawURI.hasPrefix("http") {
                 let resolved = URL(string: rawURI, relativeTo: base)?.absoluteString ?? rawURI
-                return replaceAttribute(in: tag, name: "URI", with: "\"\(resolved)\"")
+                rawKeptAudio.append(replaceAttribute(in: tag, name: "URI", with: "\"\(resolved)\""))
+            } else {
+                rawKeptAudio.append(tag)
             }
-            return tag
+        }
+        
+        // Prioritize 5.1 surround audio: if an audio group contains a 6-channel rendition,
+        // make it DEFAULT=YES, AUTOSELECT=YES and demote stereo counterparts to DEFAULT=NO.
+        var hasSurroundByGroup: [String: Bool] = [:]
+        for tag in rawKeptAudio {
+            guard let group = attributeValue(from: tag, name: "GROUP-ID") else { continue }
+            let channels = attributeValue(from: tag, name: "CHANNELS") ?? ""
+            if channels.contains("6") {
+                hasSurroundByGroup[group] = true
+            }
+        }
+        
+        let keptMedia = rawKeptAudio.map { tag -> String in
+            guard let group = attributeValue(from: tag, name: "GROUP-ID"),
+                  hasSurroundByGroup[group] == true else {
+                return tag
+            }
+            let channels = attributeValue(from: tag, name: "CHANNELS") ?? ""
+            if channels.contains("6") {
+                var updated = setOrReplaceAttribute(in: tag, name: "DEFAULT", with: "YES")
+                updated = setOrReplaceAttribute(in: updated, name: "AUTOSELECT", with: "YES")
+                return updated
+            } else {
+                return setOrReplaceAttribute(in: tag, name: "DEFAULT", with: "NO")
+            }
         }
         
         var subtitlePlaylists: [String: String] = [:]
@@ -335,6 +363,18 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
             return line
         }
         return line.replacingCharacters(in: range, with: "\(name)=\(newValue)")
+    }
+    
+    private static func setOrReplaceAttribute(in line: String, name: String, with newValue: String) -> String {
+        let pattern = #"\#(name)=(?:"[^"]*"|[^,\s]*)"#
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let nsrange = NSRange(line.startIndex..<line.endIndex, in: line)
+            if let match = regex.firstMatch(in: line, range: nsrange),
+               let range = Range(match.range, in: line) {
+                return line.replacingCharacters(in: range, with: "\(name)=\(newValue)")
+            }
+        }
+        return line + ",\(name)=\(newValue)"
     }
     
     private static func splitHLSAttributes(_ body: String) -> [String] {

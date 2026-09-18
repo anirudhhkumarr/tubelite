@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Video card: only the thumbnail is focusable (avoids the full-card white focus plate).
+/// Focus includes metadata so tvOS scrolls the entire card into view.
 public struct VideoCardView: View {
     public let video: VideoItem
     public let compact: Bool
@@ -30,10 +30,7 @@ public struct VideoCardView: View {
     }
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            cardButton
-            metadata
-        }
+        cardButton
         .frame(width: compact ? TLTheme.relatedCardWidth : nil, alignment: .topLeading)
         .frame(maxWidth: compact ? TLTheme.relatedCardWidth : .infinity, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
@@ -58,7 +55,7 @@ public struct VideoCardView: View {
             Button {
                 onSelect(video)
             } label: {
-                thumbContent
+                cardContent
             }
             .buttonStyle(TLBareButtonStyle())
             .focused(focusedId, equals: video.id)
@@ -69,7 +66,7 @@ public struct VideoCardView: View {
             Button {
                 onSelect(video)
             } label: {
-                thumbContent
+                cardContent
             }
             .buttonStyle(TLBareButtonStyle())
             .focused($isFocusedInternal)
@@ -79,6 +76,14 @@ public struct VideoCardView: View {
         }
     }
     
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            thumbContent
+            metadata
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     /// Locked 16:9 box — fixed px on tray cards, aspect-locked width on the home grid.
     private var thumbContent: some View {
         Group {
@@ -126,6 +131,7 @@ public struct VideoCardView: View {
                 .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
                 .foregroundColor(isFocused ? TLTheme.accent : TLTheme.textPrimary)
                 .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)

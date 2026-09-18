@@ -75,11 +75,11 @@ public enum TubeLiteHLSBuilder {
         
         let vFormat = candidates[0]
         
-        // 2. Select best audio format (AAC mp4a) - ALWAYS ORIGINAL AUDIO, NEVER DUBBED
+        // 2. Select best audio format (Dolby Digital Plus ec-3, AC-3, or AAC mp4a) - ALWAYS ORIGINAL AUDIO, NEVER DUBBED
         var audioCandidates: [[String: Any]] = []
         for format in adaptive {
             guard let mime = (format["mimeType"] as? String)?.lowercased(),
-                  mime.hasPrefix("audio/mp4") && mime.contains("mp4a"),
+                  mime.hasPrefix("audio/mp4") && (mime.contains("mp4a") || mime.contains("ec-3") || mime.contains("ac-3")),
                   format["url"] is String,
                   format["initRange"] is [String: Any],
                   format["indexRange"] is [String: Any] else {
@@ -95,12 +95,17 @@ public enum TubeLiteHLSBuilder {
         let candidatesToUse = !originalAudios.isEmpty ? originalAudios : audioCandidates
         
         let sortedAudios = candidatesToUse.sorted { a, b in
-            // 1. Prefer non-DRC (standard dynamic range)
+            // 1. Prefer 5.1 surround sound (6 channels) over stereo (2 channels)
+            let chA = (a["audioChannels"] as? Int) ?? 2
+            let chB = (b["audioChannels"] as? Int) ?? 2
+            if chA != chB { return chA > chB }
+            
+            // 2. Prefer non-DRC (standard dynamic range)
             let drcA = (a["isDrc"] as? Bool) == true ? 1 : 0
             let drcB = (b["isDrc"] as? Bool) == true ? 1 : 0
             if drcA != drcB { return drcA < drcB }
             
-            // 2. Prefer higher bitrate (e.g. 130kbps itag 140 over 48kbps itag 139)
+            // 3. Prefer higher bitrate (e.g. 130kbps itag 140 over 48kbps itag 139)
             let ba = (a["bitrate"] as? Int) ?? 0
             let bb = (b["bitrate"] as? Int) ?? 0
             return ba > bb
@@ -145,7 +150,9 @@ public enum TubeLiteHLSBuilder {
             let vMime = (vFormat["mimeType"] as? String) ?? ""
             let vCodec = extractCodec(from: vMime) ?? (vMime.contains("av01") ? "av01.0.08M.08" : "avc1.4D401F")
             let aMime = (aFormat["mimeType"] as? String) ?? ""
-            let aCodec = extractCodec(from: aMime) ?? "mp4a.40.2"
+            let aCodec = extractCodec(from: aMime) ?? (aMime.contains("ec-3") ? "ec-3" : (aMime.contains("ac-3") ? "ac-3" : "mp4a.40.2"))
+            let audioChannels = (aFormat["audioChannels"] as? Int) ?? 2
+            let channelsAttr = String(audioChannels)
             
             // Audio track display name (e.g. "English (US) original" or "Original Audio")
             let audioTrackName: String
@@ -153,7 +160,7 @@ public enum TubeLiteHLSBuilder {
                let name = track["displayName"] as? String, !name.isEmpty {
                 audioTrackName = name
             } else {
-                audioTrackName = "Original"
+                audioTrackName = audioChannels >= 6 ? "Original (5.1 Surround)" : "Original"
             }
             
             let duration = max(vParsed.totalDuration, aParsed.totalDuration)
@@ -164,7 +171,7 @@ public enum TubeLiteHLSBuilder {
                 "#EXTM3U",
                 "#EXT-X-VERSION:6",
                 "#EXT-X-INDEPENDENT-SEGMENTS",
-                "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio-default\",NAME=\"\(audioTrackName)\",DEFAULT=YES,AUTOSELECT=YES,URI=\"\(scheme)://local/audio.m3u8\""
+                "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio-default\",NAME=\"\(audioTrackName)\",DEFAULT=YES,AUTOSELECT=YES,CHANNELS=\"\(channelsAttr)\",URI=\"\(scheme)://local/audio.m3u8\""
             ]
             
             var subtitlePlaylists: [String: String] = [:]

@@ -59,7 +59,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         }
     }
     
-    /// H.264 / AAC adaptive stream extracted from YouTube `adaptiveFormats` (legacy / diagnostics).
+    /// H.264 / AAC / multichannel adaptive stream extracted from YouTube `adaptiveFormats`.
     public struct AdaptiveStream: Identifiable {
         public var id: String { "\(itag ?? 0)-\(url.absoluteString)" }
         public let url: URL
@@ -72,6 +72,33 @@ public class TubeLiteGatewayClient: ObservableObject {
         public let height: Int?
         public let fps: Int?
         public let approxDurationMs: Double?
+        public let audioChannels: Int?
+        
+        public init(
+            url: URL,
+            itag: Int? = nil,
+            mimeType: String,
+            codecs: String? = nil,
+            bandwidth: Int,
+            averageBitrate: Int? = nil,
+            width: Int? = nil,
+            height: Int? = nil,
+            fps: Int? = nil,
+            approxDurationMs: Double? = nil,
+            audioChannels: Int? = nil
+        ) {
+            self.url = url
+            self.itag = itag
+            self.mimeType = mimeType
+            self.codecs = codecs
+            self.bandwidth = bandwidth
+            self.averageBitrate = averageBitrate
+            self.width = width
+            self.height = height
+            self.fps = fps
+            self.approxDurationMs = approxDurationMs
+            self.audioChannels = audioChannels
+        }
     }
     
     /// A single subtitle / caption track from YouTube.
@@ -172,15 +199,27 @@ public class TubeLiteGatewayClient: ObservableObject {
     /// Primary: Native Google HLS master manifest via VisionOS client (1080p, verified continuous playback).
     /// Sole Proven Fallback: Android progressive MP4 (itag 18, verified >60s).
     /// Zero unverified fallbacks.
+    ///
+    /// Heavy network + JSON parsing runs off MainActor via nonisolated static helpers.
     public func resolvePlaybackItem(videoId: String) async -> PlaybackResolution {
-        var diagnostics = PlaybackDiagnostics(videoId: videoId)
+        let sess = session
         let signedIn = DeviceAuthService.shared.isSignedIn
+        return await Self._resolveOffMain(videoId: videoId, session: sess, signedIn: signedIn)
+    }
+    
+    /// All network I/O, JSON deserialization, and HLS manifest filtering runs here — off MainActor.
+    nonisolated private static func _resolveOffMain(
+        videoId: String,
+        session: URLSession,
+        signedIn: Bool
+    ) async -> PlaybackResolution {
+        var diagnostics = PlaybackDiagnostics(videoId: videoId)
         diagnostics.log("Resolving streams for \(videoId). Signed in for feeds: \(signedIn)")
         
         // 1. Primary Engine: VisionOS Native HLS
         diagnostics.primaryEndpoint = "https://www.youtube.com/youtubei/v1/player (VISIONOS)"
         diagnostics.log("Attempting Primary Engine: VisionOS Native HLS")
-        if let hls = await Self.resolveVisionOSHLS(videoId: videoId, session: session, diagnostics: &diagnostics) {
+        if let hls = await resolveVisionOSHLS(videoId: videoId, session: session, diagnostics: &diagnostics) {
             diagnostics.log("Resolved VisionOS HLS: \(hls.url.host ?? "") duration: \(hls.duration)s, \(hls.subtitles.count) subs")
             diagnostics.resolvedUrl = hls.filteredMaster != nil ? "tubelite-hls://local/master.m3u8" : hls.url.absoluteString
             return PlaybackResolution(
@@ -202,7 +241,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         
         // 2. Sole Proven Fallback: ANDROID muxed progressive MP4 (itag 18, verified >60s)
         diagnostics.log("VisionOS HLS unavailable — attempting Sole Proven Fallback: Android progressive MP4")
-        if let progressive = await Self.resolveAndroidProgressive(videoId: videoId, session: session) {
+        if let progressive = await resolveAndroidProgressive(videoId: videoId, session: session) {
             diagnostics.log(
                 "Fallback progressive mp4 itag=\(progressive.itag ?? 0) \(progressive.height ?? 0)p"
             )
@@ -226,7 +265,7 @@ public class TubeLiteGatewayClient: ObservableObject {
     
     /// Resolves native HLS master manifest via YouTube's VisionOS client.
     /// This is empirically verified across full video durations (zero 403 cutoffs).
-    private static func resolveVisionOSHLS(
+    nonisolated private static func resolveVisionOSHLS(
         videoId: String,
         session: URLSession,
         diagnostics: inout PlaybackDiagnostics
@@ -391,11 +430,11 @@ public class TubeLiteGatewayClient: ObservableObject {
         }
     }
     
-    private static func deviceSupportsAV1() -> Bool {
+    nonisolated private static func deviceSupportsAV1() -> Bool {
         VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
     }
     
-    private static func pickBestAdaptivePair(
+    nonisolated private static func pickBestAdaptivePair(
         from streamingData: [String: Any],
         allowAV1: Bool
     ) -> (video: AdaptiveStream, audio: AdaptiveStream)? {
@@ -404,7 +443,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         return (video, audio)
     }
     
-    private static func resolveAndroidProgressive(
+    nonisolated private static func resolveAndroidProgressive(
         videoId: String,
         session: URLSession
     ) async -> AdaptiveStream? {
@@ -412,7 +451,7 @@ public class TubeLiteGatewayClient: ObservableObject {
     }
     
     /// One ANDROID player fetch → best adaptive A/V pair + best muxed progressive.
-    private static func resolveAndroidStreams(
+    nonisolated private static func resolveAndroidStreams(
         videoId: String,
         session: URLSession,
         allowAV1: Bool
@@ -512,7 +551,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         let summary: String
     }
     
-    public static func parseCaptionTracks(from json: [String: Any]) -> [SubtitleTrack] {
+    nonisolated public static func parseCaptionTracks(from json: [String: Any]) -> [SubtitleTrack] {
         guard let captions = json["captions"] as? [String: Any],
               let tracklist = captions["playerCaptionsTracklistRenderer"] as? [String: Any],
               let captionTracks = tracklist["captionTracks"] as? [[String: Any]] else {
@@ -604,7 +643,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         }
     }
     
-    private static func parseDurationSeconds(json: [String: Any], streamingData: [String: Any]) -> Double {
+    nonisolated private static func parseDurationSeconds(json: [String: Any], streamingData: [String: Any]) -> Double {
         if let details = json["videoDetails"] as? [String: Any] {
             if let length = details["lengthSeconds"] as? String, let secs = Double(length), secs > 0 {
                 return secs
@@ -632,7 +671,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         return 0
     }
     
-    private static func parseCompatibleAdaptiveStreams(
+    nonisolated private static func parseCompatibleAdaptiveStreams(
         from streamingData: [String: Any],
         allowAV1: Bool = false
     ) -> AdaptiveParseResult {
@@ -664,6 +703,9 @@ public class TubeLiteGatewayClient: ObservableObject {
             let isMp4a = mimeLower.contains("mp4a")
                 || codecsLower.contains("mp4a")
                 || (itag.map { aacItags.contains($0) } ?? false)
+            let isEac3 = mimeLower.contains("ec-3") || codecsLower.contains("ec-3")
+            let isAc3 = mimeLower.contains("ac-3") || codecsLower.contains("ac-3")
+            let isSupportedAudio = isMp4a || isEac3 || isAc3
             
             // VP9 / Opus / webm never work in AVPlayer. AV1 only when HW decode exists.
             let isVP9 = mimeLower.contains("vp9") || mimeLower.contains("vp09")
@@ -683,6 +725,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let width = intValue(format["width"])
             let height = intValue(format["height"])
             let fps = intValue(format["fps"])
+            let audioChannels = intValue(format["audioChannels"]) ?? 2
             let approxDurationMs: Double? = {
                 if let s = format["approxDurationMs"] as? String { return Double(s) }
                 if let n = format["approxDurationMs"] as? Double { return n }
@@ -700,13 +743,14 @@ public class TubeLiteGatewayClient: ObservableObject {
                 width: width,
                 height: height,
                 fps: fps,
-                approxDurationMs: approxDurationMs
+                approxDurationMs: approxDurationMs,
+                audioChannels: audioChannels
             )
             
             let isVideo = (mimeLower.hasPrefix("video/") || height != nil) && (isAvc1 || (allowAV1 && isAV1))
             if isVideo {
                 videos.append(stream)
-            } else if (mimeLower.hasPrefix("audio/") || height == nil) && isMp4a {
+            } else if (mimeLower.hasPrefix("audio/") || height == nil) && isSupportedAudio {
                 let isOriginal = TubeLiteHLSBuilder.isOriginalAudioTrack(format: format)
                 let isDrc = (format["isDrc"] as? Bool) == true
                 rawAudios.append((stream: stream, isOriginal: isOriginal, isDrc: isDrc))
@@ -737,13 +781,21 @@ public class TubeLiteGatewayClient: ObservableObject {
         let originalAudios = rawAudios.filter { $0.isOriginal }
         let eligibleAudios = !originalAudios.isEmpty ? originalAudios : rawAudios
         let sortedAudios = eligibleAudios.sorted { a, b in
+            // 1. Prefer 5.1 surround sound (6 channels) over stereo (2 channels)
+            let chA = a.stream.audioChannels ?? 2
+            let chB = b.stream.audioChannels ?? 2
+            if chA != chB { return chA > chB }
+            
+            // 2. Prefer standard dynamic range (non-DRC)
             if a.isDrc != b.isDrc { return !a.isDrc }
+            
+            // 3. Prefer higher bitrate
             let ba = a.stream.averageBitrate ?? a.stream.bandwidth
             let bb = b.stream.averageBitrate ?? b.stream.bandwidth
             return ba > bb
         }.map { $0.stream }
         
-        let summary = "adaptive=\(adaptive.count) video=\(sortedVideos.count) mp4a=\(sortedAudios.count) skippedCipher=\(skippedCipher) skippedOther=\(skippedIncompatible) av1Allowed=\(allowAV1)"
+        let summary = "adaptive=\(adaptive.count) video=\(sortedVideos.count) audio=\(sortedAudios.count) skippedCipher=\(skippedCipher) skippedOther=\(skippedIncompatible) av1Allowed=\(allowAV1)"
         return AdaptiveParseResult(
             videos: sortedVideos,
             audios: sortedAudios,
@@ -753,7 +805,7 @@ public class TubeLiteGatewayClient: ObservableObject {
     }
     
     /// Prefer direct `url`; otherwise unwrap `signatureCipher`/`cipher` query (`url` + `sig`/`signature`).
-    private static func resolveFormatURL(from format: [String: Any]) -> URL? {
+    nonisolated private static func resolveFormatURL(from format: [String: Any]) -> URL? {
         if let urlStr = format["url"] as? String, let url = URL(string: urlStr) {
             return url
         }
@@ -783,14 +835,14 @@ public class TubeLiteGatewayClient: ObservableObject {
         return URL(string: urlStr)
     }
     
-    private static func intValue(_ any: Any?) -> Int? {
+    nonisolated private static func intValue(_ any: Any?) -> Int? {
         if let i = any as? Int { return i }
         if let d = any as? Double { return Int(d) }
         if let s = any as? String { return Int(s) }
         return nil
     }
     
-    private static func extractCodecs(from mimeType: String) -> String? {
+    nonisolated private static func extractCodecs(from mimeType: String) -> String? {
         // e.g. video/mp4; codecs="avc1.640028"
         guard let range = mimeType.range(of: #"codecs="([^"]+)""#, options: .regularExpression) else {
             return nil
@@ -805,7 +857,7 @@ public class TubeLiteGatewayClient: ObservableObject {
         return String(matched[start..<close])
     }
     
-    private static func googleAPIErrorMessage(from data: Data) -> String? {
+    nonisolated private static func googleAPIErrorMessage(from data: Data) -> String? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let error = json["error"] as? [String: Any] else {
             return nil
@@ -866,7 +918,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 self.homeContinuationToken = feed.continuationToken
                 self.homeVideos = feed.items
                 self.lastHomeFeedAt = Date()
@@ -914,7 +966,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             guestRequest.httpBody = try JSONSerialization.data(withJSONObject: guestPayload)
             let (data, response) = try await session.data(for: guestRequest)
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 self.homeContinuationToken = feed.continuationToken
                 self.homeVideos = feed.items
                 self.lastHomeFeedAt = Date()
@@ -982,7 +1034,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 self.homeContinuationToken = feed.continuationToken
                 
                 let existingIds = Set(self.homeVideos.map { $0.id })
@@ -1015,7 +1067,7 @@ public class TubeLiteGatewayClient: ObservableObject {
                 guestRequest.httpBody = try? JSONSerialization.data(withJSONObject: guestPayload)
                 if let (guestData, guestRes) = try? await session.data(for: guestRequest),
                    (guestRes as? HTTPURLResponse)?.statusCode == 200,
-                   let guestFeed = try? JSONDecoder().decode(FeedResponse.self, from: guestData) {
+                   let guestFeed = try? await Self.decodeFeed(from: guestData) {
                     self.homeContinuationToken = guestFeed.continuationToken
                     let existingIds = Set(self.homeVideos.map { $0.id })
                     let uniqueNew = guestFeed.items.filter { !existingIds.contains($0.id) }
@@ -1065,7 +1117,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
             let (data, response) = try await session.data(for: request)
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 let existingIds = Set(self.homeVideos.map { $0.id })
                 let uniqueNew = feed.items.filter { !existingIds.contains($0.id) }
                 self.homeVideos.append(contentsOf: uniqueNew)
@@ -1123,7 +1175,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 self.searchContinuationToken = feed.continuationToken
                 self.searchResults = feed.items
             } else {
@@ -1169,7 +1221,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let feed = try JSONDecoder().decode(FeedResponse.self, from: data)
+                let feed = try await Self.decodeFeed(from: data)
                 searchContinuationToken = feed.continuationToken
                 let existing = Set(searchResults.map(\.id))
                 searchResults.append(contentsOf: feed.items.filter { !existing.contains($0.id) })
@@ -1210,7 +1262,7 @@ public class TubeLiteGatewayClient: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                let resp = try JSONDecoder().decode(WatchNextResponse.self, from: data)
+                let resp = try await Self.decodeWatchNext(from: data)
                 return (resp.details, resp.items)
             }
         } catch {
@@ -1248,5 +1300,17 @@ public class TubeLiteGatewayClient: ObservableObject {
         } catch {
             return []
         }
+    }
+    
+    // MARK: - Background JSON Decoding
+    
+    /// Decode FeedResponse off MainActor to avoid blocking the UI thread during JSON parsing.
+    nonisolated private static func decodeFeed(from data: Data) async throws -> FeedResponse {
+        try JSONDecoder().decode(FeedResponse.self, from: data)
+    }
+    
+    /// Decode WatchNextResponse off MainActor.
+    nonisolated private static func decodeWatchNext(from data: Data) async throws -> WatchNextResponse {
+        try JSONDecoder().decode(WatchNextResponse.self, from: data)
     }
 }

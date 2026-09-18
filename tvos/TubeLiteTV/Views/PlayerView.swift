@@ -197,6 +197,7 @@ public struct PlayerView: View {
     
     private func setupAndPlay() async {
         teardownPlayer()
+        Self.configureAudioSession()
         
         isLoadingStream = true
         isBuffering = true
@@ -302,6 +303,7 @@ public struct PlayerView: View {
                 guard self.player === newPlayer else { return }
                 switch observedItem.status {
                 case .readyToPlay:
+                    self.selectMultichannelAudioIfAvailable(on: observedItem)
                     newPlayer?.play()
                 case .failed:
                     self.capturePlayerFailure(from: observedItem)
@@ -497,7 +499,7 @@ public struct PlayerView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
     
-    /// Push ABR toward the top available rung (1080 H.264 / up to 4K for AV1 composition).
+    /// Push ABR toward the top available rung (1080 H.264 / up to 4K for AV1 composition) and configure spatial audio.
     private static func applyMaxQualityPreferences(to item: AVPlayerItem, targetHeight: Int) {
         let height = max(targetHeight, 1080)
         let width = height >= 2160 ? 3840 : (height >= 1440 ? 2560 : 1920)
@@ -507,6 +509,43 @@ public struct PlayerView: View {
             : (height >= 1440 ? 20_000_000 : 12_000_000)
         if #available(tvOS 15.0, *) {
             item.preferredPeakBitRateForExpensiveNetworks = item.preferredPeakBitRate
+            item.allowedAudioSpatializationFormats = .monoStereoAndMultichannel
+        }
+    }
+    
+    /// Activates tvOS movie playback audio session for multichannel pass-through and spatial audio upmixing.
+    private static func configureAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .moviePlayback)
+            try session.setActive(true)
+        } catch {
+            // Non-fatal, CoreAudio will fall back to system defaults
+        }
+    }
+    
+    /// Inspects the asset's audible media selection group and selects a multichannel/surround track if present.
+    private func selectMultichannelAudioIfAvailable(on item: AVPlayerItem) {
+        if #available(tvOS 16.0, *) {
+            Task {
+                guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible) else { return }
+                let options = group.options
+                if let surroundOption = options.first(where: { option in
+                    let desc = (option.displayName + " " + (option.extendedLanguageTag ?? "")).lowercased()
+                    return desc.contains("5.1") || desc.contains("surround") || desc.contains("spatial")
+                }) {
+                    item.select(surroundOption, in: group)
+                }
+            }
+        } else {
+            guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else { return }
+            let options = group.options
+            if let surroundOption = options.first(where: { option in
+                let desc = (option.displayName + " " + (option.extendedLanguageTag ?? "")).lowercased()
+                return desc.contains("5.1") || desc.contains("surround") || desc.contains("spatial")
+            }) {
+                item.select(surroundOption, in: group)
+            }
         }
     }
     
