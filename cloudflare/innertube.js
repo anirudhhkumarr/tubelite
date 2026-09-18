@@ -2,6 +2,7 @@ import { withCors } from './cors.js';
 import { computeCacheKey, getCachedResponse, setCachedResponse } from './cache.js';
 import { normalizeFeedResponse, normalizeWatchNextResponse } from './normalizer.js';
 import { recursiveSanitize, extractVideoContents, appendContentsAndReplaceToken } from './sanitizer.js';
+import { curateWatchNext, curateFeed } from './curator.js';
 
 
 const YT_BASE_URL = 'https://www.youtube.com/youtubei/v1';
@@ -271,7 +272,8 @@ export async function handleInnerTubeRequest(request, url, env, ctx) {
         }
 
         watchNext.continuationToken = currentToken;
-        responseBodyToReturn = JSON.stringify(watchNext);
+        const curatedWatchNext = await curateWatchNext(watchNext, env);
+        responseBodyToReturn = JSON.stringify(curatedWatchNext);
       } else {
         // Standardized FeedResponse schema (browse / search)
         const feed = normalizeFeedResponse(jsonObj);
@@ -307,7 +309,8 @@ export async function handleInnerTubeRequest(request, url, env, ctx) {
         }
 
         feed.continuationToken = currentToken;
-        responseBodyToReturn = JSON.stringify(feed);
+        const curatedFeed = (endpoint === 'browse') ? await curateFeed(feed, env) : feed;
+        responseBodyToReturn = JSON.stringify(curatedFeed);
       }
     } catch (e) {
       console.error("Normalizer/Sanitization error:", e);
