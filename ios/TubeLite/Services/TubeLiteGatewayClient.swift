@@ -49,8 +49,8 @@ public class TubeLiteGatewayClient: ObservableObject {
         public var isSurroundAvailable: Bool = false
         public var isSurroundActive: Bool = false
         public var isUpmixingSelected: Bool = false
-        public var audioStatusDescription: String = "Stereo 2.0 (tvOS Hardware Spatial Audio)"
-        public var audioRenderingMode: String = "Stereo 2.0 (tvOS Hardware Spatial Upmixing: ACTIVE)"
+        public var audioStatusDescription: String = "Stereo 2.0 (iOS Hardware Spatial Audio)"
+        public var audioRenderingMode: String = "Stereo 2.0 (iOS Hardware Spatial Upmixing: ACTIVE)"
         public var executionTimeline: [String] = []
         
         public init(videoId: String) {

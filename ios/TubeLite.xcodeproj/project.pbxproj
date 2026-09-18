@@ -1,0 +1,347 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB1000012C88000100000001 /* TubeLiteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000022C88000100000001 /* TubeLiteApp.swift */; };
+		BB1000032C88000100000001 /* VideoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000042C88000100000001 /* VideoItem.swift */; };
+		BB1000052C88000100000001 /* TubeLiteGatewayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000062C88000100000001 /* TubeLiteGatewayClient.swift */; };
+		BB1000072C88000100000001 /* TubeLiteHLSBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000082C88000100000001 /* TubeLiteHLSBuilder.swift */; };
+		BB1000092C88000100000001 /* TubeLiteResourceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000A2C88000100000001 /* TubeLiteResourceLoader.swift */; };
+		BB10000B2C88000100000001 /* PlaybackPreloadCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000C2C88000100000001 /* PlaybackPreloadCache.swift */; };
+		BB10000D2C88000100000001 /* DeviceAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10000E2C88000100000001 /* DeviceAuthService.swift */; };
+		BB10000F2C88000100000001 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000102C88000100000001 /* Theme.swift */; };
+		BB1000112C88000100000001 /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000122C88000100000001 /* RemoteImage.swift */; };
+		BB1000132C88000100000001 /* VideoCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000142C88000100000001 /* VideoCardView.swift */; };
+		BB1000152C88000100000001 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000162C88000100000001 /* PlayerView.swift */; };
+		BB1000172C88000100000001 /* WatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000182C88000100000002 /* WatchView.swift */; };
+		BB1000192C88000100000002 /* HomeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001A2C88000100000001 /* HomeFeedView.swift */; };
+		BB10001B2C88000100000001 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001C2C88000100000001 /* SearchView.swift */; };
+		BB10001D2C88000100000001 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB10001E2C88000100000001 /* AccountView.swift */; };
+		BB10001F2C88000100000001 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1000202C88000100000001 /* MainView.swift */; };
+		BB1000212C88000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1000222C88000100000001 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		BB1000002C88000100000001 /* TubeLite.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TubeLite.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB1000022C88000100000001 /* TubeLiteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeLiteApp.swift; sourceTree = "<group>"; };
+		BB1000042C88000100000001 /* VideoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoItem.swift; sourceTree = "<group>"; };
+		BB1000062C88000100000001 /* TubeLiteGatewayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeLiteGatewayClient.swift; sourceTree = "<group>"; };
+		BB1000082C88000100000001 /* TubeLiteHLSBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeLiteHLSBuilder.swift; sourceTree = "<group>"; };
+		BB10000A2C88000100000001 /* TubeLiteResourceLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeLiteResourceLoader.swift; sourceTree = "<group>"; };
+		BB10000C2C88000100000001 /* PlaybackPreloadCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackPreloadCache.swift; sourceTree = "<group>"; };
+		BB10000E2C88000100000001 /* DeviceAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceAuthService.swift; sourceTree = "<group>"; };
+		BB1000102C88000100000001 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		BB1000122C88000100000001 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImage.swift; sourceTree = "<group>"; };
+		BB1000142C88000100000001 /* VideoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCardView.swift; sourceTree = "<group>"; };
+		BB1000162C88000100000001 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		BB1000182C88000100000002 /* WatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchView.swift; sourceTree = "<group>"; };
+		BB10001A2C88000100000001 /* HomeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeFeedView.swift; sourceTree = "<group>"; };
+		BB10001C2C88000100000001 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		BB10001E2C88000100000001 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		BB1000202C88000100000001 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		BB1000222C88000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB1000242C88000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BB10002C2C88000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		BB1000252C88000100000001 = {
+			isa = PBXGroup;
+			children = (
+				BB1000262C88000100000001 /* TubeLite */,
+				BB10002A2C88000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		BB1000262C88000100000001 /* TubeLite */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000022C88000100000001 /* TubeLiteApp.swift */,
+				BB1000272C88000100000001 /* Models */,
+				BB1000282C88000100000001 /* Services */,
+				BB1000292C88000100000001 /* Views */,
+				BB1000222C88000100000001 /* Assets.xcassets */,
+				BB1000242C88000100000001 /* Info.plist */,
+			);
+			path = TubeLite;
+			sourceTree = "<group>";
+		};
+		BB1000272C88000100000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000042C88000100000001 /* VideoItem.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		BB1000282C88000100000001 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000062C88000100000001 /* TubeLiteGatewayClient.swift */,
+				BB1000082C88000100000001 /* TubeLiteHLSBuilder.swift */,
+				BB10000A2C88000100000001 /* TubeLiteResourceLoader.swift */,
+				BB10000C2C88000100000001 /* PlaybackPreloadCache.swift */,
+				BB10000E2C88000100000001 /* DeviceAuthService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		BB1000292C88000100000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000102C88000100000001 /* Theme.swift */,
+				BB1000122C88000100000001 /* RemoteImage.swift */,
+				BB1000142C88000100000001 /* VideoCardView.swift */,
+				BB1000162C88000100000001 /* PlayerView.swift */,
+				BB1000182C88000100000002 /* WatchView.swift */,
+				BB10001A2C88000100000001 /* HomeFeedView.swift */,
+				BB10001C2C88000100000001 /* SearchView.swift */,
+				BB10001E2C88000100000001 /* AccountView.swift */,
+				BB1000202C88000100000001 /* MainView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BB10002A2C88000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000002C88000100000001 /* TubeLite.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BB1000182C88000100000001 /* TubeLite */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB1000192C88000100000001 /* Build configuration list for PBXNativeTarget "TubeLite" */;
+			buildPhases = (
+				BB10002B2C88000100000001 /* Sources */,
+				BB10002C2C88000100000001 /* Frameworks */,
+				BB10002D2C88000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TubeLite;
+			productName = TubeLite;
+			productReference = BB1000002C88000100000001 /* TubeLite.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB10002E2C88000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					BB1000182C88000100000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = BB10002F2C88000100000001 /* Build configuration list for PBXProject "TubeLite" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BB1000252C88000100000001;
+			productRefGroup = BB10002A2C88000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BB1000182C88000100000001 /* TubeLite */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BB10002D2C88000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB1000212C88000100000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BB10002B2C88000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB1000012C88000100000001 /* TubeLiteApp.swift in Sources */,
+				BB1000032C88000100000001 /* VideoItem.swift in Sources */,
+				BB1000052C88000100000001 /* TubeLiteGatewayClient.swift in Sources */,
+				BB1000072C88000100000001 /* TubeLiteHLSBuilder.swift in Sources */,
+				BB1000092C88000100000001 /* TubeLiteResourceLoader.swift in Sources */,
+				BB10000B2C88000100000001 /* PlaybackPreloadCache.swift in Sources */,
+				BB10000D2C88000100000001 /* DeviceAuthService.swift in Sources */,
+				BB10000F2C88000100000001 /* Theme.swift in Sources */,
+				BB1000112C88000100000001 /* RemoteImage.swift in Sources */,
+				BB1000132C88000100000001 /* VideoCardView.swift in Sources */,
+				BB1000152C88000100000001 /* PlayerView.swift in Sources */,
+				BB1000172C88000100000001 /* WatchView.swift in Sources */,
+				BB1000192C88000100000002 /* HomeFeedView.swift in Sources */,
+				BB10001B2C88000100000001 /* SearchView.swift in Sources */,
+				BB10001D2C88000100000001 /* AccountView.swift in Sources */,
+				BB10001F2C88000100000001 /* MainView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		BB1000302C88000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		BB1000312C88000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		BB1000322C88000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TubeLite/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tubelite.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB1000332C88000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TubeLite/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tubelite.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BB1000192C88000100000001 /* Build configuration list for PBXNativeTarget "TubeLite" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB1000322C88000100000001 /* Debug */,
+				BB1000332C88000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB10002F2C88000100000001 /* Build configuration list for PBXProject "TubeLite" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB1000302C88000100000001 /* Debug */,
+				BB1000312C88000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BB10002E2C88000100000001 /* Project object */;
+}
