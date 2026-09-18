@@ -105,8 +105,8 @@ public struct WatchView: View {
                     .padding(.horizontal, TLTheme.pageInset)
                     
                     relatedSection
-                        .padding(.top, 4)
-                        .padding(.bottom, 48)
+                        .padding(.top, -20)
+                        .zIndex(20)
                 }
             }
         }
@@ -304,7 +304,8 @@ public struct WatchView: View {
                     }
                 }
                 .padding(.horizontal, TLTheme.pageInset)
-                .padding(.vertical, 8)
+                .padding(.top, 28)
+                .padding(.bottom, 8)
             }
             .id("related_scroll_\(currentVideo.id)")
             .onChange(of: scrollTargetId) { _, target in
