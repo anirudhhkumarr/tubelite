@@ -215,19 +215,22 @@ public struct WatchView: View {
     private var logLines: [String] {
         var lines: [String] = []
         if let diag = lastDiagnostics {
+            // Latest execution events and HLS playback logs at the top
             lines.append(contentsOf: diag.executionTimeline.reversed())
             if let avLog = lastAVPlayerLog, !avLog.isEmpty {
                 lines.append(contentsOf: avLog.components(separatedBy: "\n").filter { !$0.isEmpty }.reversed())
             }
+            lines.append("--- Stream Details ---")
             lines.append("Video: \(diag.videoId)")
-            lines.append("Stage: \(diag.failureStage ?? "None")")
-            lines.append("HTTP: \(diag.primaryHttpStatus.map(String.init) ?? "N/A")")
-            lines.append("Playability: \(diag.primaryPlayabilityStatus ?? "N/A")")
+            let audioSummary = diag.isSurroundActive
+                ? "5.1 Surround (6ch pass-through)"
+                : "Stereo 2.0 (Spatial Upmixing)"
+            lines.append("Audio: \(audioSummary)")
+            if let stage = diag.failureStage, stage != "None" {
+                lines.append("Failure: \(stage) · HTTP \(diag.primaryHttpStatus.map(String.init) ?? "N/A")")
+            }
             if let reason = diag.primaryPlayabilityReason, !reason.isEmpty {
                 lines.append("Reason: \(reason)")
-            }
-            if let url = diag.resolvedUrl, !url.isEmpty {
-                lines.append("URL: \(url)")
             }
         } else if let avLog = lastAVPlayerLog, !avLog.isEmpty {
             lines.append(contentsOf: avLog.components(separatedBy: "\n").filter { !$0.isEmpty }.reversed())

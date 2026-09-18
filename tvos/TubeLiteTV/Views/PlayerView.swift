@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import CoreMedia
 
 /// Fullscreen AVPlayer. Presented from WatchView when playing.
 public struct PlayerView: View {
@@ -28,10 +29,9 @@ public struct PlayerView: View {
     
     @State private var diagnostics: TubeLiteGatewayClient.PlaybackDiagnostics? = nil
     @State private var avPlayerErrorLog: String? = nil
-    @State private var showDiagnosticsHUD: Bool = false
     
     private enum ErrorAction: Hashable {
-        case tryAgain, signIn, diagnostics, back
+        case tryAgain, signIn, back
     }
     
     @FocusState private var focusedErrorAction: ErrorAction?
@@ -108,9 +108,9 @@ public struct PlayerView: View {
     }
     
     private var errorPanel: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
+                .font(.system(size: 44))
                 .foregroundColor(TLTheme.warning)
             
             Text("Playback Unavailable")
@@ -121,17 +121,7 @@ public struct PlayerView: View {
                 .font(.callout)
                 .foregroundColor(TLTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 900)
-            
-            if let avLog = avPlayerErrorLog, !showDiagnosticsHUD {
-                Text(avLog)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(TLTheme.warning)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 1000, alignment: .leading)
-                    .padding(16)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(TLTheme.surface))
-            }
+                .frame(maxWidth: 700)
             
             if requiresSignIn {
                 Text("Some videos need a signed-in account.")
@@ -146,19 +136,10 @@ public struct PlayerView: View {
                 if requiresSignIn {
                     errorButton("Sign In", action: .signIn, onOpenAccount)
                 }
-                if diagnostics != nil {
-                    errorButton(showDiagnosticsHUD ? "Hide Info" : "Diagnostics", action: .diagnostics) {
-                        showDiagnosticsHUD.toggle()
-                    }
-                }
                 errorButton("Back", action: .back, closePlayer)
             }
-            
-            if showDiagnosticsHUD, let diag = diagnostics {
-                diagnosticsCard(diag)
-            }
         }
-        .padding(36)
+        .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
@@ -167,32 +148,6 @@ public struct PlayerView: View {
             .buttonStyle(.borderedProminent)
             .tint(focusedErrorAction == action ? .white : TLTheme.surfaceElevated)
             .focused($focusedErrorAction, equals: action)
-    }
-    
-    private func diagnosticsCard(_ diag: TubeLiteGatewayClient.PlaybackDiagnostics) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Stage: \(diag.failureStage ?? "None")")
-                Text("HTTP: \(diag.primaryHttpStatus.map(String.init) ?? "N/A")")
-                Text("Playability: \(diag.primaryPlayabilityStatus ?? "N/A")")
-                Text("URL: \(diag.resolvedUrl ?? "N/A")")
-                    .lineLimit(4)
-                if let avLog = avPlayerErrorLog {
-                    Text("--- AVPlayer ---").foregroundColor(TLTheme.warning)
-                    Text(avLog).foregroundColor(TLTheme.warning)
-                }
-                Text("--- Timeline ---")
-                ForEach(diag.executionTimeline, id: \.self) { line in
-                    Text(line)
-                }
-            }
-            .font(.system(size: 18, design: .monospaced))
-            .foregroundColor(TLTheme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-        }
-        .frame(maxWidth: 1200, maxHeight: 520)
-        .background(RoundedRectangle(cornerRadius: 16).fill(TLTheme.surface))
     }
     
     private func setupAndPlay() async {
@@ -211,10 +166,7 @@ public struct PlayerView: View {
         let resolution = await PlaybackPreloadCache.shared.resolution(for: videoId)
         guard !Task.isCancelled else { return }
         var diag = resolution.diagnostics
-        diag.log("Selected: \(resolution.selectedHeight)p · \(resolution.selectedCodec ?? "unknown codec")")
-        if resolution.isPlayable {
-            diag.log("Stream ready (preloaded or fresh)")
-        }
+        diag.log("Stream: \(resolution.selectedHeight)p · \(diag.audioStatusDescription)")
         self.diagnostics = diag
         publishDiagnostics()
         
@@ -242,19 +194,9 @@ public struct PlayerView: View {
             let asset = AVURLAsset(url: loader.masterURL)
             asset.resourceLoader.setDelegate(loader, queue: loader.queue)
             item = AVPlayerItem(asset: asset)
-            if var d = self.diagnostics {
-                d.log("Playing via native HLS (\(resolution.selectedHeight)p \(resolution.selectedCodec ?? "")) · \(resolution.subtitleTracks.count) subs")
-                self.diagnostics = d
-            }
-            publishDiagnostics()
         } else if let hlsURL = resolution.hlsURL {
             self.resourceLoader = nil
             item = AVPlayerItem(url: hlsURL)
-            if var d = self.diagnostics {
-                d.log("Playing via direct VisionOS HLS (\(resolution.selectedHeight)p \(resolution.selectedCodec ?? ""))")
-                self.diagnostics = d
-            }
-            publishDiagnostics()
         }
         
         guard !Task.isCancelled else { return }
@@ -303,7 +245,7 @@ public struct PlayerView: View {
                 guard self.player === newPlayer else { return }
                 switch observedItem.status {
                 case .readyToPlay:
-                    self.selectMultichannelAudioIfAvailable(on: observedItem)
+                    self.inspectActiveAudioFormat(on: observedItem)
                     newPlayer?.play()
                 case .failed:
                     self.capturePlayerFailure(from: observedItem)
@@ -320,6 +262,8 @@ public struct PlayerView: View {
                 guard self.player === observedPlayer else { return }
                 switch observedPlayer.timeControlStatus {
                 case .playing:
+                    self.diagnostics?.log("Playback started")
+                    self.publishDiagnostics()
                     self.isLoadingStream = false
                     self.isBuffering = false
                 case .waitingToPlayAtSpecifiedRate:
@@ -524,28 +468,36 @@ public struct PlayerView: View {
         }
     }
     
-    /// Inspects the asset's audible media selection group and selects a multichannel/surround track if present.
-    private func selectMultichannelAudioIfAvailable(on item: AVPlayerItem) {
-        if #available(tvOS 16.0, *) {
-            Task {
-                guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible) else { return }
-                let options = group.options
-                if let surroundOption = options.first(where: { option in
-                    let desc = (option.displayName + " " + (option.extendedLanguageTag ?? "")).lowercased()
-                    return desc.contains("5.1") || desc.contains("surround") || desc.contains("spatial")
-                }) {
-                    item.select(surroundOption, in: group)
+    /// Inspects the active audio track using CoreMedia to verify hardware channel decoding.
+    private func inspectActiveAudioFormat(on item: AVPlayerItem) {
+        var hardwareChannels: Int? = nil
+        for track in item.tracks {
+            guard track.isEnabled,
+                  let assetTrack = track.assetTrack,
+                  assetTrack.mediaType == .audio else {
+                continue
+            }
+            for desc in assetTrack.formatDescriptions {
+                let audioDesc = desc as! CMAudioFormatDescription
+                if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(audioDesc) {
+                    let channels = Int(asbd.pointee.mChannelsPerFrame)
+                    if channels > 0 {
+                        hardwareChannels = channels
+                        break
+                    }
                 }
             }
-        } else {
-            guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else { return }
-            let options = group.options
-            if let surroundOption = options.first(where: { option in
-                let desc = (option.displayName + " " + (option.extendedLanguageTag ?? "")).lowercased()
-                return desc.contains("5.1") || desc.contains("surround") || desc.contains("spatial")
-            }) {
-                item.select(surroundOption, in: group)
-            }
+            if hardwareChannels != nil { break }
+        }
+        
+        if let channels = hardwareChannels {
+            let isSurround = channels >= 6
+            diagnostics?.audioChannels = channels
+            diagnostics?.isSurroundActive = isSurround
+            diagnostics?.isUpmixingSelected = !isSurround
+            diagnostics?.audioRenderingMode = isSurround ? "5.1 Pass-Through" : "Spatial Upmixing"
+            diagnostics?.log("CoreMedia Audio: \(channels)ch \(isSurround ? "(5.1 Surround)" : "(Spatial Upmixing)")")
+            publishDiagnostics()
         }
     }
     

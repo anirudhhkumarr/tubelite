@@ -45,6 +45,12 @@ public class TubeLiteGatewayClient: ObservableObject {
         
         public var resolvedUrl: String? = nil
         public var failureStage: String? = nil
+        public var audioChannels: Int = 2
+        public var isSurroundAvailable: Bool = false
+        public var isSurroundActive: Bool = false
+        public var isUpmixingSelected: Bool = false
+        public var audioStatusDescription: String = "Stereo 2.0 (tvOS Hardware Spatial Audio)"
+        public var audioRenderingMode: String = "Stereo 2.0 (tvOS Hardware Spatial Upmixing: ACTIVE)"
         public var executionTimeline: [String] = []
         
         public init(videoId: String) {
@@ -246,6 +252,12 @@ public class TubeLiteGatewayClient: ObservableObject {
                 "Fallback progressive mp4 itag=\(progressive.itag ?? 0) \(progressive.height ?? 0)p"
             )
             diagnostics.resolvedUrl = progressive.url.absoluteString
+            diagnostics.isSurroundAvailable = false
+            diagnostics.isSurroundActive = false
+            diagnostics.isUpmixingSelected = true
+            diagnostics.audioChannels = 2
+            diagnostics.audioStatusDescription = "Stereo 2.0 (Spatial Upmixing)"
+            diagnostics.audioRenderingMode = "Spatial Upmixing"
             return PlaybackResolution(
                 progressiveURL: progressive.url,
                 selectedHeight: progressive.height ?? 360,
@@ -410,6 +422,17 @@ public class TubeLiteGatewayClient: ObservableObject {
                         subPlaylists = filtered.subtitlePlaylists
                         selectedHeight = filtered.maxHeight
                         diagnostics.log("Filtered VisionOS HLS: \(filtered.variantCount) variants (up to \(filtered.maxHeight)p) · \(subtitles.count) subs")
+                        
+                        diagnostics.isSurroundAvailable = filtered.surroundAvailable
+                        diagnostics.isSurroundActive = filtered.surroundAvailable
+                        diagnostics.isUpmixingSelected = !filtered.surroundAvailable
+                        diagnostics.audioChannels = filtered.surroundAvailable ? 6 : 2
+                        diagnostics.audioStatusDescription = filtered.surroundAvailable
+                            ? "5.1 Surround (6ch)"
+                            : "Stereo 2.0 (Spatial Upmixing)"
+                        diagnostics.audioRenderingMode = filtered.surroundAvailable
+                            ? "5.1 Pass-Through"
+                            : "Spatial Upmixing"
                     }
                 }
             } catch {

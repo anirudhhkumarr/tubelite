@@ -126,7 +126,7 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
         subtitleTracks: [TubeLiteGatewayClient.SubtitleTrack] = [],
         duration: Double = 0,
         allowAV1: Bool = false
-    ) -> (playlist: String, subtitlePlaylists: [String: String], variantCount: Int, maxHeight: Int)? {
+    ) -> (playlist: String, subtitlePlaylists: [String: String], variantCount: Int, maxHeight: Int, surroundAvailable: Bool, audioSummary: String)? {
         let lines = master.components(separatedBy: .newlines)
         var header: [String] = []
         var mediaTags: [String] = []
@@ -236,24 +236,31 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
             }
         }
         
-        // Prioritize 5.1 surround audio: if an audio group contains a 6-channel rendition,
+        // Prioritize 5.1 surround audio: if an audio group contains a 6-channel rendition per RFC 8216,
         // make it DEFAULT=YES, AUTOSELECT=YES and demote stereo counterparts to DEFAULT=NO.
         var hasSurroundByGroup: [String: Bool] = [:]
+        var audioTracksSummary: [String] = []
         for tag in rawKeptAudio {
             guard let group = attributeValue(from: tag, name: "GROUP-ID") else { continue }
-            let channels = attributeValue(from: tag, name: "CHANNELS") ?? ""
-            if channels.contains("6") {
+            let name = attributeValue(from: tag, name: "NAME") ?? "Audio"
+            let channels = parseAudioChannels(from: tag)
+            if channels >= 6 {
                 hasSurroundByGroup[group] = true
             }
+            let chCount = channels >= 6 ? "5.1 (\(channels)ch)" : "\(channels).0 (\(channels)ch)"
+            audioTracksSummary.append("\(name): \(chCount)")
         }
+        
+        let surroundAvailable = hasSurroundByGroup.values.contains(true)
+        let audioSummary = audioTracksSummary.isEmpty ? "Default Stereo (2ch)" : audioTracksSummary.joined(separator: ", ")
         
         let keptMedia = rawKeptAudio.map { tag -> String in
             guard let group = attributeValue(from: tag, name: "GROUP-ID"),
                   hasSurroundByGroup[group] == true else {
                 return tag
             }
-            let channels = attributeValue(from: tag, name: "CHANNELS") ?? ""
-            if channels.contains("6") {
+            let channels = parseAudioChannels(from: tag)
+            if channels >= 6 {
                 var updated = setOrReplaceAttribute(in: tag, name: "DEFAULT", with: "YES")
                 updated = setOrReplaceAttribute(in: updated, name: "AUTOSELECT", with: "YES")
                 return updated
@@ -269,8 +276,8 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
             let durStr = String(format: "%.5f", duration)
             for (idx, track) in subtitleTracks.enumerated() {
                 let escapedName = track.name
-                    .replacingOccurrences(of: "\"", with: "'")
-                    .trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: "\"", with: "'")
+                .trimmingCharacters(in: .whitespaces)
                 let autoselect = (idx == 0) ? "YES" : "NO"
                 subMediaTags.append(
                     "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subtitles-default\",NAME=\"\(escapedName)\",DEFAULT=NO,AUTOSELECT=\(autoselect),FORCED=NO,LANGUAGE=\"\(track.languageCode)\",URI=\"\(Self.urlScheme)://local/subtitles_\(track.id).m3u8\""
@@ -306,7 +313,9 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
             playlist: out.joined(separator: "\n") + "\n",
             subtitlePlaylists: subtitlePlaylists,
             variantCount: sorted.count,
-            maxHeight: maxHeight
+            maxHeight: maxHeight,
+            surroundAvailable: surroundAvailable,
+            audioSummary: audioSummary
         )
     }
     
@@ -331,6 +340,15 @@ public final class TubeLiteResourceLoader: NSObject, AVAssetResourceLoaderDelega
     
     private static func mediaGroupID(from streamInf: String, attribute: String) -> String? {
         attributeValue(from: streamInf, name: attribute)
+    }
+    
+    /// Strictly parses audio channel count from RFC 8216 `#EXT-X-MEDIA:TYPE=AUDIO` metadata.
+    public static func parseAudioChannels(from mediaTag: String) -> Int {
+        guard let rawChannels = attributeValue(from: mediaTag, name: "CHANNELS") else {
+            return 2 // RFC 8216 Section 4.3.4.1: If omitted, channel count MUST be 2 or fewer.
+        }
+        let firstParam = rawChannels.components(separatedBy: "/").first?.trimmingCharacters(in: .whitespaces) ?? ""
+        return Int(firstParam) ?? 2
     }
     
     private static func attributeValue(from line: String, name: String) -> String? {
