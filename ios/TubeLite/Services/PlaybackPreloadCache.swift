@@ -1,0 +1,145 @@
+import Foundation
+
+/// Focus-dwell preload: resolve streams off-main thread while the user hovers a card
+/// so playback starts instantly without blocking or freezing the main UI.
+public actor PlaybackPreloadCache {
+    public static let shared = PlaybackPreloadCache()
+    
+    private struct Entry {
+        let resolution: TubeLiteGatewayClient.PlaybackResolution
+        let storedAt: Date
+    }
+    
+    private var entries: [String: Entry] = [:]
+    private var inflight: [String: Task<TubeLiteGatewayClient.PlaybackResolution, Never>] = [:]
+    private let ttl: TimeInterval = 8 * 60
+    private let maxEntries = 6
+    
+    /// Focus-dwell threshold: tuned just above normal continuous scrolling cadence (~200–300ms)
+    /// so scrolling past cancels cleanly without triggering network tasks, while intentional pauses (≥400ms)
+    /// begin preloading immediately for instant playback response.
+    public static let focusDwellDelayNanoseconds: UInt64 = 400_000_000 // 400ms
+    
+    public func preload(videoId: String) {
+        guard !videoId.isEmpty else { return }
+        if let entry = entries[videoId], Date().timeIntervalSince(entry.storedAt) < ttl {
+            return
+        }
+        if let existing = inflight[videoId], !existing.isCancelled {
+            return
+        }
+        
+        let task = Task.detached(priority: .utility) { [weak self] in
+            let resolution = await TubeLiteGatewayClient.resolvePlayback(videoId: videoId)
+            if let self {
+                await self.storeResolution(videoId: videoId, resolution: resolution)
+            }
+            return resolution
+        }
+        inflight[videoId] = task
+    }
+    
+    /// Preloads exclusively a single video for the iOS feed.
+    /// Strictly cancels any other in-flight preload so at most ONE background resolve ever executes at a time.
+    public func preloadExclusive(videoId: String) {
+        guard !videoId.isEmpty else { return }
+        if let entry = entries[videoId], Date().timeIntervalSince(entry.storedAt) < ttl {
+            return
+        }
+        if let existing = inflight[videoId], !existing.isCancelled {
+            return
+        }
+        
+        // Cancel any competing in-flight preloads
+        for (id, task) in inflight {
+            if id != videoId {
+                task.cancel()
+            }
+        }
+        inflight = inflight.filter { $0.key == videoId && !$0.value.isCancelled }
+        
+        let task = Task.detached(priority: .utility) { [weak self] in
+            let resolution = await TubeLiteGatewayClient.resolvePlayback(videoId: videoId)
+            guard !Task.isCancelled else { return resolution }
+            if let self {
+                await self.storeResolution(videoId: videoId, resolution: resolution)
+            }
+            return resolution
+        }
+        inflight[videoId] = task
+    }
+    
+    private func storeResolution(videoId: String, resolution: TubeLiteGatewayClient.PlaybackResolution) {
+        inflight[videoId] = nil
+        guard !Task.isCancelled else { return }
+        guard resolution.isPlayable || resolution.error != nil else { return }
+        store(videoId: videoId, resolution: resolution)
+    }
+    
+    /// Prefer a warm cache / in-flight resolve; otherwise fetch fresh.
+    /// If an in-flight task was cancelled, its error is discarded and a fresh resolve runs.
+    public func resolution(for videoId: String) async -> TubeLiteGatewayClient.PlaybackResolution {
+        if let entry = entries[videoId], Date().timeIntervalSince(entry.storedAt) < ttl {
+            return entry.resolution
+        }
+        if let task = inflight[videoId] {
+            let result = await task.value
+            // Cancelled preloads return "Preload cancelled" — don't surface that to the user,
+            // just fall through to a fresh resolve.
+            if result.isPlayable || result.requiresAuth {
+                return result
+            }
+            if let error = result.error, error.lowercased().contains("cancelled") {
+                // Fall through to fresh resolve.
+            } else {
+                return result
+            }
+        }
+        let resolution = await TubeLiteGatewayClient.resolvePlayback(videoId: videoId)
+        store(videoId: videoId, resolution: resolution)
+        return resolution
+    }
+
+    public func cachedTracking(for videoId: String) -> (playbackUrl: String, watchtimeUrl: String, duration: Double)? {
+        guard let entry = entries[videoId],
+              Date().timeIntervalSince(entry.storedAt) < ttl,
+              let tracking = entry.resolution.trackingInfo,
+              let pb = tracking.playbackUrl,
+              let wt = tracking.watchtimeUrl else {
+            return nil
+        }
+        return (playbackUrl: pb, watchtimeUrl: wt, duration: entry.resolution.durationSeconds)
+    }
+    
+    public func invalidate(videoId: String) {
+        entries.removeValue(forKey: videoId)
+        inflight[videoId]?.cancel()
+        inflight[videoId] = nil
+    }
+    
+    /// Cancel an in-flight preload without removing any cached result.
+    /// Use on defocus: stop wasting bandwidth, but keep resolved data for instant playback.
+    /// Does NOT nil out the inflight entry — if the resolve completed before cancellation
+    /// took effect, resolution(for:) can still await the good result.
+    public func cancelInflight(videoId: String) {
+        inflight[videoId]?.cancel()
+        inflight[videoId] = nil
+    }
+    
+    /// Cancel every in-flight preload — call when navigating away so stale resolves
+    /// don't tie up the network or block MainActor continuations.
+    public func cancelAll() {
+        for (_, task) in inflight { task.cancel() }
+        inflight.removeAll()
+    }
+    
+    private func store(videoId: String, resolution: TubeLiteGatewayClient.PlaybackResolution) {
+        entries[videoId] = Entry(resolution: resolution, storedAt: Date())
+        if entries.count > maxEntries {
+            let sorted = entries.sorted { $0.value.storedAt < $1.value.storedAt }
+            for old in sorted.prefix(entries.count - maxEntries) {
+                entries.removeValue(forKey: old.key)
+            }
+        }
+    }
+}
